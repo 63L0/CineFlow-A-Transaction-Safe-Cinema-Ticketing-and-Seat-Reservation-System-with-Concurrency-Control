@@ -270,3 +270,55 @@ Pushing on that surfaced a **real deadlock path** that no review round had found
 **Context.** CURRENT_STATE.md said the original Movie-Ticket-Booking-Management-System repo was discarded entirely. The repo restructure moved it into `legacy\` instead, so it is kept, not discarded.
 **Decision.** The original project stays unchanged in `legacy\` at the repo root. It is read-only. No CineFlow file, script, migration or test may reference, copy from, or build it. It is kept so the original author's LICENSE stays with their code, and as a before/after comparison for the defense.
 **Found by.** Agent report, repo restructure plan (CURRENT_STATE.md line 67 conflict).
+
+---
+
+## D-024 — usp_GetSeatMap may return a PurgedCount result set first
+
+**Context.** §5.2 calls `usp_PurgeExpiredHolds` when its guard fires, and that procedure returns 1 row: `PurgedCount` (§4). So `usp_GetSeatMap` returns 2 result sets when expired holds exist and 1 otherwise. §4 promised only "one row per seat".
+
+**Decision.** Documented, not changed. The §4 row is amended. The DAL reads `usp_GetSeatMap` through one helper that skips any result set without a `SeatId` column. An M3 test covers both cases.
+
+**Why.** The §5.1 and §5.2 bodies are frozen and correct. Every in-SQL alternative breaks another rule.
+
+**Rejected:** `INSERT … EXEC` capture inside GetSeatMap (a ROLLBACK inside purge would raise 3915 and hide the real error); a `@Silent` flag on purge (a zero-row path violates PC-01 and changes purge's gate-2 signature).
+
+**Reopens if:** purge's result contract changes.
+
+---
+
+## D-025 — usp_CreateBooking runs the guarded purge inline
+
+**Context.** D-002 says the purge runs on read and write paths. `usp_CreateBooking` must return exactly 1 row (PC-01), and Tests\05 calls it via `INSERT … EXEC`. An `EXEC usp_PurgeExpiredHolds` inside it would add a `PurgedCount` result set and break those calls. Nested `INSERT … EXEC` is not allowed.
+
+**Decision.** `usp_CreateBooking` contains the §5.1 purge statements (without the final SELECT), behind the same `IF EXISTS` guard, in its own transaction, committed before the booking transaction begins.
+
+**Why.** Satisfies D-002 and keeps PC-01's single row. The booking transaction's lock order (LO-01c) is unchanged. Without it, a seat held by an expired but unpurged hold fails with a false 50001.
+
+**Cost.** The purge logic exists in two places. Any change to the §5.1 purge statements must be made in `usp_CreateBooking` in the same commit. When called inside an outer transaction (`INSERT … EXEC` in tests), the purge is not separately committed.
+
+**Rejected:** purge only in GetSeatMap (contradicts D-002's "write paths").
+
+---
+
+## D-026 — BookingRef = 'CF' + BookingId zero-padded to 10
+
+**Context.** `Bookings.BookingRef` is `NVARCHAR(12) NOT NULL UNIQUE`. No generation rule existed.
+
+**Decision.** Insert with a placeholder ('T' + 11 hex characters from NEWID()). Then, in the same transaction, UPDATE it to 'CF' + BookingId zero-padded to 10 digits (e.g. CF0000000123).
+
+**Why.** Guaranteed unique, because it is derived from the identity. Readable at the counter. No schema change. A placeholder cannot equal a final ref: 'T' is not a hex digit, and final refs start with 'CF'.
+
+**Rejected:** a random NEWID() code (small collision risk, unreadable); a SEQUENCE (schema change).
+
+---
+
+## D-027 — usp_CreateBooking rejects showtimes not open for booking (50006)
+
+**Context.** §4 and §7 had no rule against booking a showtime that does not exist, is not `Scheduled`, or has already started.
+
+**Decision.** New error 50006, "This showtime is not open for booking.", raised when the showtime is not found, its `Status <> 'Scheduled'`, or `StartsAt <= SYSUTCDATETIME()`. It was added to §7 before use (PC-02).
+
+**Why.** A cancelled or past showtime must never be sellable. An unknown showtime gets a clear message instead of 50004.
+
+---

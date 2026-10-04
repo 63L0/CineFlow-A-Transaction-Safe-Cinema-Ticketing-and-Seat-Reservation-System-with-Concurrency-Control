@@ -214,7 +214,7 @@ Every write path, in the order it takes locks. Adding a procedure that touches t
 
 | Procedure | 1st | 2nd | 3rd | Notes |
 |---|---|---|---|---|
-| `usp_CreateBooking` | `Bookings` (new row, uncontended) | `ShowtimeSeatLocks` asc `SeatId` | — | Serialization is `PK_SeatLock`, not the `Bookings` insert |
+| `usp_CreateBooking` | `Bookings` (new row, uncontended) | `ShowtimeSeatLocks` asc `SeatId` | — | Serialization is `PK_SeatLock`, not the `Bookings` insert. The guarded purge (D-025) runs first, in its own committed transaction, in `usp_PurgeExpiredHolds` order |
 | `usp_ConfirmPayment` | `Bookings` (`UPDLOCK, HOLDLOCK`) | `Payments` | — | Never touches `ShowtimeSeatLocks` |
 | `usp_CancelBooking` | `Bookings` (`UPDLOCK, HOLDLOCK`) | `ShowtimeSeatLocks` (deletes owned rows only; no ordering required, D-019) | — | Delete is in the same transaction as the status change |
 | `usp_PurgeExpiredHolds` | `Bookings` (`UPDLOCK, HOLDLOCK`) | `ShowtimeSeatLocks` (deletes owned rows only; no ordering required, D-019) | — | Matches the §5.1 body. `READPAST` cannot be combined with `HOLDLOCK` (D-019) |
