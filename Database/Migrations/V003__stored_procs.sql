@@ -255,3 +255,110 @@ BEGIN
 END
 
 GO
+
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+GO
+
+CREATE OR ALTER PROCEDURE usp_ConfirmPayment
+    @BookingId       INT,
+    @RequestToken    UNIQUEIDENTIFIER,
+    @Method          NVARCHAR(30),
+    @AmountTendered  DECIMAL(10,2) = NULL,
+    @ReferenceNumber NVARCHAR(50)  = NULL,
+    @ProcessedBy     INT
+AS
+BEGIN
+  SET NOCOUNT ON;
+  SET XACT_ABORT ON;
+
+  -- Fast path: this exact request already succeeded.
+  DECLARE @ExistingId INT;
+  SELECT @ExistingId = PaymentId FROM Payments WHERE RequestToken = @RequestToken;
+  IF @ExistingId IS NOT NULL
+  BEGIN
+      SELECT @ExistingId AS PaymentId, CAST(1 AS BIT) AS WasDuplicate;
+      RETURN;
+  END
+
+  IF @Method NOT IN ('Cash','Card','GCash','Maya')
+      THROW 50015, 'Unknown payment method.', 1;
+
+  BEGIN TRY
+    BEGIN TRANSACTION;
+
+      DECLARE @Status NVARCHAR(20), @Total DECIMAL(10,2);
+      SELECT @Status = Status, @Total = TotalAmount
+      FROM Bookings WITH (UPDLOCK, HOLDLOCK)
+      WHERE BookingId = @BookingId;
+
+      IF @Status IS NULL       THROW 50010, 'Booking not found.', 1;
+      IF @Status = 'CANCELLED' THROW 50011, 'Booking was cancelled.', 1;
+      IF @Status = 'EXPIRED'   THROW 50012, 'Hold expired. Please reselect seats.', 1;
+      IF @Status = 'CONFIRMED' THROW 50016, 'Booking is already paid.', 1;
+
+      DECLARE @ChangeDue DECIMAL(10,2);
+
+      IF @Method = 'Cash'
+      BEGIN
+          IF @AmountTendered IS NULL
+              THROW 50017, 'Amount tendered is required for cash payments.', 1;
+          IF @AmountTendered < @Total
+              THROW 50014, 'Amount tendered is less than total due.', 1;
+          IF @ReferenceNumber IS NOT NULL
+              THROW 50018, 'Reference number is not applicable to cash payments.', 1;
+          SET @ChangeDue = @AmountTendered - @Total;
+      END
+      ELSE
+      BEGIN
+          IF @ReferenceNumber IS NULL OR LTRIM(RTRIM(@ReferenceNumber)) = ''
+              THROW 50019, 'Reference number is required for digital payments.', 1;
+          IF @AmountTendered IS NOT NULL
+              THROW 50020, 'Amount tendered applies to cash payments only.', 1;
+          SET @ChangeDue = 0;
+      END
+
+      INSERT INTO Payments (BookingId, RequestToken, Method, Amount, AmountTendered,
+                            ChangeDue, ReferenceNumber, Status, ProcessedBy)
+      VALUES (@BookingId, @RequestToken, @Method, @Total, @AmountTendered,
+              @ChangeDue, @ReferenceNumber, 'PAID', @ProcessedBy);
+
+      DECLARE @PaymentId INT = SCOPE_IDENTITY();
+
+      -- INV-05: ExpiresAt cleared in the same statement as the status change.
+      UPDATE Bookings SET Status = 'CONFIRMED', ExpiresAt = NULL
+      WHERE BookingId = @BookingId;
+
+      INSERT INTO AuditLogs (UserId, Action, EntityName, EntityId, Details)
+      VALUES (@ProcessedBy, 'PAYMENT_CONFIRMED', 'Booking', @BookingId,
+              CONCAT('PaymentId=', @PaymentId, '; Method=', @Method, '; Total=', @Total));
+
+    COMMIT TRANSACTION;
+    SELECT @PaymentId AS PaymentId, CAST(0 AS BIT) AS WasDuplicate;
+  END TRY
+  BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+
+    IF ERROR_NUMBER() IN (2601, 2627)
+    BEGIN
+        -- Do NOT branch on ERROR_MESSAGE() text (PC-01 corollary): that couples
+        -- behaviour to an index NAME, so a rename silently changes behaviour.
+        -- Ask the only question that matters instead.
+        DECLARE @Winner INT;
+        SELECT @Winner = PaymentId FROM Payments WHERE RequestToken = @RequestToken;
+
+        IF @Winner IS NOT NULL
+        BEGIN
+            SELECT @Winner AS PaymentId, CAST(1 AS BIT) AS WasDuplicate;
+            RETURN;
+        END
+
+        -- Some other unique constraint fired. Never return empty (PC-01).
+        THROW 50021, 'Payment could not be recorded: this booking already has an active payment.', 1;
+    END
+
+    THROW;
+  END CATCH
+END
+
+GO
