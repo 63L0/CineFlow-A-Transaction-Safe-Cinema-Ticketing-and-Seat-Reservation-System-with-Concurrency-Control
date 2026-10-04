@@ -26,7 +26,7 @@ This file is the answer to "what already exists?" Read it before starting any ta
 |---|---|
 | `DATA-CONTRACT.md` | **FROZEN** — schema, constraints, indexes, procedure signatures, error registry, test specs |
 | `IMPLEMENTATION-STANDARDS.md` | **FROZEN** — IS-01…IS-05, LO-01 (+ Addendum A), PC-01, VG-01 |
-| `DECISIONS.md` | Live decision log, 20 entries (D-015 to D-021 added 2026-10-04) |
+| `DECISIONS.md` | Live decision log, 21 entries (D-015 to D-022 added 2026-10-04) |
 | `Docs/WEEK0-DEFENSE-PACK.md` | Scope, topology, demo runbook (its day numbers are superseded by §6) |
 | `AGENTS.md` | Agent entry point |
 
@@ -64,13 +64,13 @@ Frozen means: propose changes, do not make them.
 
 No solution, no projects, no forms. `CineFlow.sln` and the six projects are created **by the human in Visual Studio at the start of M5**, not by an agent — non-SDK-style `.csproj` files are easy to corrupt (see `DECISIONS.md` D-011).
 
-The original `Movie-Ticket-Booking-Management-System` repo is **discarded entirely**. Do not reference, migrate, or preserve any of it.
+The original `Movie-Ticket-Booking-Management-System` repo is archived read-only in `legacy\` (D-022). Do not reference, migrate, or copy any of it.
 
 ## 5. Environment
 
 | Item | Value |
 |---|---|
-| Repo root | `C:\Projects\CineFlow` |
+| Repo root | `C:\Users\gelos\Downloads\Movie-Ticket-Booking-Management-System-main` (original project in `legacy\`, D-022) |
 | Agent | Hermes CLI, run natively in **Windows PowerShell** |
 | Agent editor | VS Code (Hermes integrates with VS Code, not Visual Studio) |
 | Designer / run / debug | Visual Studio (from M5 onward), operated by the human |

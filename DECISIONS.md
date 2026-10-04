@@ -262,3 +262,11 @@ Pushing on that surfaced a **real deadlock path** that no review round had found
 **Context.** §4 froze `usp_Login(@Username, @PasswordHash)`. BCrypt salts every hash, so a hash computed in C# never equals the stored hash. SQL cannot compare them; only `BCrypt.Verify` can.
 **Decision.** `usp_Login(@Username NVARCHAR(50))` returns 1 row: `UserId, FullName, RoleName, PasswordHash, IsActive`. It never returns an empty result (PC-01). An unknown username THROWs the same error the BLL raises for a wrong password, so the response never reveals which usernames exist. The error number is 50050. The BLL calls `BCrypt.Verify` and rejects inactive users.
 **Found by.** Reviewer, M2 planning.
+
+---
+
+## D-022 — The original repository is archived under `legacy\`, read-only
+
+**Context.** CURRENT_STATE.md said the original Movie-Ticket-Booking-Management-System repo was discarded entirely. The repo restructure moved it into `legacy\` instead, so it is kept, not discarded.
+**Decision.** The original project stays unchanged in `legacy\` at the repo root. It is read-only. No CineFlow file, script, migration or test may reference, copy from, or build it. It is kept so the original author's LICENSE stays with their code, and as a before/after comparison for the defense.
+**Found by.** Agent report, repo restructure plan (CURRENT_STATE.md line 67 conflict).
