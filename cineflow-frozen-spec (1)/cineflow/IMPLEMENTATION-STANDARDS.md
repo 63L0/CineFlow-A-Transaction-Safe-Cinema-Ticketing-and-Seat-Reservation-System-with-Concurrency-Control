@@ -217,7 +217,7 @@ Every write path, in the order it takes locks. Adding a procedure that touches t
 | `usp_CreateBooking` | `Bookings` (new row, uncontended) | `ShowtimeSeatLocks` asc `SeatId` | — | Serialization is `PK_SeatLock`, not the `Bookings` insert |
 | `usp_ConfirmPayment` | `Bookings` (`UPDLOCK, HOLDLOCK`) | `Payments` | — | Never touches `ShowtimeSeatLocks` |
 | `usp_CancelBooking` | `Bookings` (`UPDLOCK, HOLDLOCK`) | `ShowtimeSeatLocks` asc `SeatId` | — | Delete is in the same transaction as the status change |
-| `usp_PurgeExpiredHolds` | `Bookings` (`UPDLOCK, READPAST`) | `ShowtimeSeatLocks` asc `SeatId` | — | `READPAST` skips rows another session is already resolving |
+| `usp_PurgeExpiredHolds` | `Bookings` (`UPDLOCK, HOLDLOCK`) | `ShowtimeSeatLocks` (deletes owned rows only; no ordering required, D-019) | — | Matches the §5.1 body. `READPAST` cannot be combined with `HOLDLOCK` (D-019) |
 | `usp_GetSeatMap` | guard: `SELECT … READCOMMITTED` (no lock held) | then `usp_PurgeExpiredHolds` order if work exists | — | The guard exists so a clean read takes no write lock |
 
 **`usp_ConfirmPayment` never touching `ShowtimeSeatLocks` is itself a deadlock-avoidance property**, not an omission. Confirmation changes a booking's status and inserts a payment; the seats are already locked and stay locked. Any future edit that makes confirm touch the lock table must be added to this registry and re-checked against every other row.
