@@ -257,7 +257,7 @@ Conditional rules are part of the signature. A parameter's nullability in the de
 
 | Procedure | Parameters | Conditional rules | Returns |
 |---|---|---|---|
-| `usp_Login` | `@Username`, `@PasswordHash` | — | 1 row: `UserId, FullName, RoleName` |
+| `usp_Login` | `@Username NVARCHAR(50)` | Never an empty result (PC-01): an unknown username THROWs 50050, the same message the BLL raises for a wrong password. The password is verified in C# with `BCrypt.Verify`, never in SQL (D-021). | 1 row: `UserId, FullName, RoleName, PasswordHash, IsActive` |
 | `usp_SearchMovies` | `@Title=NULL`, `@Genre=NULL`, `@Rating=NULL`, `@IsActive=NULL` | all optional; static SQL only (IS-01) | result set (may be empty — see PC-01 note) |
 | `usp_CreateShowtime` | `@MovieId`, `@ScreenId`, `@StartsAt`, `@BasePrice` | `EndsAt` derived from duration + 20 min buffer; overlap check under `UPDLOCK` | 1 row: `ShowtimeId` |
 | `usp_GetSeatMap` | `@ShowtimeId` | guarded purge runs first | result set: one row per seat |
@@ -584,6 +584,7 @@ Every test below is executed by `Deploy/verify.bat`. SQL tests live in `Tests/`;
 | 50031 | Booking already expired. | `usp_CancelBooking` |
 | 50032 | Cancellation is not allowed within one hour of the showtime. | `usp_CancelBooking` |
 | 50040 | This screen already has a showtime overlapping that slot. | `usp_CreateShowtime` |
+| 50050 | Invalid username or password. | `usp_Login` |
 | 90001 | SECURITY: direct table access succeeded when it should be denied. | test harness only |
 
 ---

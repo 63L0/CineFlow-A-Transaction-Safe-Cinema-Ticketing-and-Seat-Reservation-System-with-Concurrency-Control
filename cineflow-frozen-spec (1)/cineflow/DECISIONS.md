@@ -260,5 +260,5 @@ Pushing on that surfaced a **real deadlock path** that no review round had found
 ## D-021 — `usp_Login` takes only `@Username`; the password is verified in C#
 
 **Context.** §4 froze `usp_Login(@Username, @PasswordHash)`. BCrypt salts every hash, so a hash computed in C# never equals the stored hash. SQL cannot compare them; only `BCrypt.Verify` can.
-**Decision.** `usp_Login(@Username NVARCHAR(50))` returns 1 row: `UserId, FullName, RoleName, PasswordHash, IsActive`. It never returns an empty result (PC-01). An unknown username THROWs the same error the BLL raises for a wrong password, so the response never reveals which usernames exist. The error number is assigned in the next step. The BLL calls `BCrypt.Verify` and rejects inactive users.
+**Decision.** `usp_Login(@Username NVARCHAR(50))` returns 1 row: `UserId, FullName, RoleName, PasswordHash, IsActive`. It never returns an empty result (PC-01). An unknown username THROWs the same error the BLL raises for a wrong password, so the response never reveals which usernames exist. The error number is 50050. The BLL calls `BCrypt.Verify` and rejects inactive users.
 **Found by.** Reviewer, M2 planning.
