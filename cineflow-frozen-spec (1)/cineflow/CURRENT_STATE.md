@@ -26,7 +26,7 @@ This file is the answer to "what already exists?" Read it before starting any ta
 |---|---|
 | `DATA-CONTRACT.md` | **FROZEN** — schema, constraints, indexes, procedure signatures, error registry, test specs |
 | `IMPLEMENTATION-STANDARDS.md` | **FROZEN** — IS-01…IS-05, LO-01 (+ Addendum A), PC-01, VG-01 |
-| `DECISIONS.md` | Live decision log, 15 entries (D-015, D-016, D-017 added 2026-10-04) |
+| `DECISIONS.md` | Live decision log, 20 entries (D-015 to D-021 added 2026-10-04) |
 | `Docs/WEEK0-DEFENSE-PACK.md` | Scope, topology, demo runbook (its day numbers are superseded by §6) |
 | `AGENTS.md` | Agent entry point |
 
@@ -40,7 +40,7 @@ Frozen means: propose changes, do not make them.
 | `CineFlow` database | **VERIFIED** | Tables = 11. Rebuilt from clean 2026-10-04 (prior hand-repaired state dropped: database + `cineflow_app` login). |
 | `V001__schema.sql` — 11 tables, `dbo.IntList` | **VERIFIED** | Gate 2(c) green: every frozen constraint/index present. 16 CHECKs, all `is_disabled = 0`, `is_not_trusted = 0`. |
 | `V002__indexes.sql` | **VERIFIED** | 26 indexes on user tables (`sys.indexes` type > 0). |
-| `V003__stored_procs.sql` — 6 procedures | NOT STARTED | Bodies exist in the contract as **WRITTEN** text only |
+| `V003__stored_procs.sql` — 9 procedures (D-020) | NOT STARTED | Bodies exist in the contract as **WRITTEN** text only |
 | `V004__seed.sql` | NOT STARTED | |
 | `V005__security.sql` — `cineflow_app` | **VERIFIED** | Login + user present; 7 permission rows. Gate 4 green. |
 
@@ -107,7 +107,7 @@ Each phase ends at a gate. **Do not begin a phase until the previous gate is gre
 |---|---|---|---|---|
 | M0 | Specification frozen | — | Four artifacts written and reviewed | **DONE** |
 | M1 | Schema + security | M0 | `verify.bat` gates 1, 2, 4 pass | **DONE (2026-10-04)** |
-| M2 | Stored procedures | M1 (tables must exist) | gates 1, 2, 3 pass | **CURRENT** |
+| M2 | Stored procedures | M1 (tables must exist) | gates 1, 2 (no SKIPPED lines) and 4 pass; gate 3 moves to M3 (D-020) | **CURRENT** |
 | M3 | Seed + invariants | M2 (procs write the data) | all 5 SQL gates pass | pending |
 | M4 | **Concurrency proof** | M3 (needs real rows) | TC-CONC-01/02, TC-CANCEL-01/02, TC-PURGE, TC-PAY all green | pending |
 | M5 | Data + business layers | M4 (contract proven before wrapping it) | unit tests pass; no SQL above the DAL | pending |
