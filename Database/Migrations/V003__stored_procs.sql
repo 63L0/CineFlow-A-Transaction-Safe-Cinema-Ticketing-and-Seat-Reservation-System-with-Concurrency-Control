@@ -73,3 +73,127 @@ BEGIN
 END
 
 GO
+
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+GO
+
+CREATE OR ALTER PROCEDURE usp_CreateBooking
+    @UserId      INT,
+    @ShowtimeId  INT,
+    @SeatIds     dbo.IntList READONLY,
+    @CreatedBy   INT
+AS
+BEGIN
+  SET NOCOUNT ON;
+  SET XACT_ABORT ON;
+
+  DECLARE @SeatCount INT = (SELECT COUNT(*) FROM @SeatIds);
+  DECLARE @ScreenId INT, @BasePrice DECIMAL(10,2), @ShowStatus NVARCHAR(20), @StartsAt DATETIME2;
+  DECLARE @BookingId INT, @BookingRef NVARCHAR(12), @Total DECIMAL(10,2), @ExpiresAt DATETIME2;
+  DECLARE @Expired TABLE (BookingId INT PRIMARY KEY);
+  DECLARE @Ordered TABLE (Seq INT IDENTITY(1,1) PRIMARY KEY, SeatId INT NOT NULL);
+
+  BEGIN TRY
+    -- Input checks first: no transaction and no purge for a request that can never succeed.
+    IF @SeatCount = 0  THROW 50002, 'Select at least one seat.', 1;
+    IF @SeatCount > 10 THROW 50003, 'A maximum of 10 seats per transaction.', 1;
+
+    -- D-002 / D-025: guarded purge, inlined (no PurgedCount result set), committed
+    -- in its own short transaction before the booking transaction starts.
+    IF EXISTS (SELECT 1 FROM Bookings
+               WHERE Status = 'PENDING' AND ExpiresAt < SYSUTCDATETIME())
+    BEGIN
+      BEGIN TRANSACTION;
+        INSERT INTO @Expired (BookingId)
+        SELECT BookingId FROM Bookings WITH (UPDLOCK, HOLDLOCK)
+        WHERE Status = 'PENDING' AND ExpiresAt < SYSUTCDATETIME();
+
+        DELETE L FROM ShowtimeSeatLocks L
+        INNER JOIN @Expired E ON E.BookingId = L.BookingId;
+
+        -- INV-05: ExpiresAt cleared in the same statement as the status change.
+        UPDATE B SET Status = 'EXPIRED', ExpiresAt = NULL
+        FROM Bookings B INNER JOIN @Expired E ON E.BookingId = B.BookingId;
+      COMMIT TRANSACTION;
+    END
+
+    BEGIN TRANSACTION;
+
+      SELECT @ScreenId = ScreenId, @BasePrice = BasePrice,
+             @ShowStatus = Status, @StartsAt = StartsAt
+      FROM Showtimes WHERE ShowtimeId = @ShowtimeId;
+
+      -- D-027: unknown, not Scheduled, or already started.
+      IF @ScreenId IS NULL OR @ShowStatus <> 'Scheduled' OR @StartsAt <= SYSUTCDATETIME()
+          THROW 50006, 'This showtime is not open for booking.', 1;
+
+      -- INV-02: every seat exists and is on this showtime's screen.
+      IF (SELECT COUNT(*) FROM Seats s
+          INNER JOIN @SeatIds i ON i.Value = s.SeatId
+          WHERE s.ScreenId = @ScreenId) <> @SeatCount
+          THROW 50004, 'One or more seats do not belong to this showtime''s screen.', 1;
+
+      -- INV-03
+      IF EXISTS (SELECT 1 FROM Seats s
+                 INNER JOIN @SeatIds i ON i.Value = s.SeatId
+                 WHERE s.IsUsable = 0)
+          THROW 50005, 'One or more selected seats are out of service.', 1;
+
+      -- Fast, clean fail for the common case. Not the guarantee: PK_SeatLock is (LO-01a).
+      IF EXISTS (SELECT 1 FROM ShowtimeSeatLocks l
+                 INNER JOIN @SeatIds i ON i.Value = l.SeatId
+                 WHERE l.ShowtimeId = @ShowtimeId)
+          THROW 50001, 'One or more seats were just taken.', 1;
+
+      -- INV-12: unit price snapshot and total computed together.
+      SET @Total     = @BasePrice * @SeatCount;
+      SET @ExpiresAt = DATEADD(MINUTE, 10, SYSUTCDATETIME());   -- D-002: 10-minute hold
+
+      -- D-026: placeholder ref ('T' is not a hex digit, so it cannot collide
+      -- with a final 'CF' ref), replaced by the BookingId-derived ref below.
+      INSERT INTO Bookings (BookingRef, UserId, ShowtimeId, Status, TotalAmount, ExpiresAt, CreatedBy)
+      VALUES (N'T' + LEFT(REPLACE(CONVERT(NVARCHAR(36), NEWID()), N'-', N''), 11),
+              @UserId, @ShowtimeId, 'PENDING', @Total, @ExpiresAt, @CreatedBy);
+
+      SET @BookingId  = SCOPE_IDENTITY();
+      SET @BookingRef = N'CF' + RIGHT(N'0000000000' + CAST(@BookingId AS NVARCHAR(10)), 10);
+
+      UPDATE Bookings SET BookingRef = @BookingRef WHERE BookingId = @BookingId;
+
+      -- LO-01b: materialize ordered, then insert in ascending SeatId.
+      INSERT INTO @Ordered (SeatId) SELECT Value FROM @SeatIds ORDER BY Value;
+
+      INSERT INTO ShowtimeSeatLocks (ShowtimeId, SeatId, BookingId, LockedAt)
+      SELECT @ShowtimeId, o.SeatId, @BookingId, SYSUTCDATETIME()
+      FROM @Ordered o ORDER BY o.Seq;
+
+      INSERT INTO BookingSeats (BookingId, SeatId, UnitPrice)
+      SELECT @BookingId, o.SeatId, @BasePrice
+      FROM @Ordered o;
+
+      INSERT INTO AuditLogs (UserId, Action, EntityName, EntityId, Details)
+      VALUES (@CreatedBy, 'BOOKING_CREATED', 'Booking', @BookingId,
+              CONCAT('Ref=', @BookingRef, '; Seats=', @SeatCount, '; Total=', @Total));
+
+    COMMIT TRANSACTION;
+    SELECT @BookingId AS BookingId, @BookingRef AS BookingRef,
+           @Total AS TotalAmount, @ExpiresAt AS ExpiresAt;
+  END TRY
+  BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+
+    -- PC-01 corollary: re-query the fact, never parse the message. A duplicate-key
+    -- error is 50001 only if a requested seat is now actually locked; otherwise
+    -- (e.g. a BookingRef collision) the original error is rethrown unchanged.
+    IF ERROR_NUMBER() IN (2601, 2627)
+       AND EXISTS (SELECT 1 FROM ShowtimeSeatLocks l
+                   INNER JOIN @SeatIds i ON i.Value = l.SeatId
+                   WHERE l.ShowtimeId = @ShowtimeId)
+        THROW 50001, 'One or more seats were just taken.', 1;
+
+    THROW;
+  END CATCH
+END
+
+GO
