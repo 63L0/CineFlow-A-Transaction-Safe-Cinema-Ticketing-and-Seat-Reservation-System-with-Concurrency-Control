@@ -18,3 +18,4 @@ App.config
 # Logs
 logs/
 *.log
+.workbuddy-ai/
