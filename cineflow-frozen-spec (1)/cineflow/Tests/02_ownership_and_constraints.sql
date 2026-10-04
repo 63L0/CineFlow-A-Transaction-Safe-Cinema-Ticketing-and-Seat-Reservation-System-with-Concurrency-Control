@@ -32,9 +32,26 @@ BEGIN
     WHERE o.type IN ('U','P','V','TF','IF','FN')
       AND o.schema_id = SCHEMA_ID('dbo')
       AND OBJECTPROPERTY(o.object_id, 'OwnerId') <> USER_ID('dbo');
-    THROW 91002, 'OWNERSHIP VIOLATION: objects not owned by dbo. Ownership chaining will break. Run: ALTER AUTHORIZATION ON SCHEMA::dbo TO dbo;', 1;
+    THROW 91002, 'OWNERSHIP VIOLATION: objects not owned by dbo. Ownership chaining will break. Transfer the object: ALTER AUTHORIZATION ON OBJECT::dbo.<name> TO SCHEMA OWNER;', 1;
 END
 PRINT '  [OK] ownership  all dbo objects owned by dbo';
+
+-- The dbo schema must be owned by dbo for ownership chaining to hold.
+-- This is ASSERTED, never set: SQL Server prohibits changing the owner of
+-- sys, dbo or information_schema (Msg 15150). See D-015.
+IF NOT EXISTS (
+    SELECT 1 FROM sys.schemas s
+    JOIN sys.database_principals p ON p.principal_id = s.principal_id
+    WHERE s.name = 'dbo' AND p.name = 'dbo'
+)
+BEGIN
+    SELECT s.name AS SchemaName, p.name AS OwnerName
+    FROM sys.schemas s
+    JOIN sys.database_principals p ON p.principal_id = s.principal_id
+    WHERE s.name = 'dbo';
+    THROW 91002, 'OWNERSHIP VIOLATION: schema dbo is not owned by dbo. This cannot be repaired in place; the database must be rebuilt.', 1;
+END
+PRINT '  [OK] ownership  schema dbo is owned by dbo (asserted, not set)';
 
 ----------------------------------------------------------------
 -- (b) No untrusted or disabled constraints
