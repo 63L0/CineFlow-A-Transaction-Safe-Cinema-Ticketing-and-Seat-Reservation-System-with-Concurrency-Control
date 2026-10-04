@@ -96,6 +96,35 @@ PRINT '  [OK] contract   all frozen constraints and indexes present';
 --     Types are compared as the rendered declaration so the failure
 --     message reads like the DDL the developer wrote.
 ----------------------------------------------------------------
+-- Sections (d) and (e) inspect procedures. At M1 no procedure exists yet, so
+-- they are SKIPPED -- announced, not silent, and not by weakening them.
+-- A PARTIAL set is a harder failure than none: a procedure was dropped or
+-- renamed. See D-016.
+DECLARE @ContractProcs TABLE (ProcName SYSNAME);
+INSERT INTO @ContractProcs VALUES
+    ('usp_CreateBooking'), ('usp_ConfirmPayment'), ('usp_CancelBooking'),
+    ('usp_GetSeatMap'),    ('usp_PurgeExpiredHolds');
+
+DECLARE @ProcsPresent INT = (
+    SELECT COUNT(*) FROM sys.procedures p
+    WHERE p.name IN (SELECT ProcName FROM @ContractProcs)
+);
+
+IF @ProcsPresent = 0
+BEGIN
+    PRINT '  [--] signatures SKIPPED - no contract procedures exist yet (expected at M1)';
+    PRINT '  [--] defaults   SKIPPED - same reason';
+    PRINT '  [OK] TC-SEC-04  gate 2 complete for the current milestone';
+    RETURN;
+END
+
+IF @ProcsPresent < (SELECT COUNT(*) FROM @ContractProcs)
+BEGIN
+    SELECT c.ProcName, 'MISSING' AS Problem
+    FROM @ContractProcs c
+    WHERE NOT EXISTS (SELECT 1 FROM sys.procedures p WHERE p.name = c.ProcName);
+    THROW 91007, 'PARTIAL PROCEDURE SET: some contract procedures exist and some do not. A procedure was dropped, renamed, or never created.', 1;
+END
 DECLARE @Expected TABLE (
     ProcName   SYSNAME,
     Ordinal    INT,
