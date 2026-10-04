@@ -159,7 +159,7 @@ INSERT INTO @Expected (ProcName, Ordinal, ParamName, Decl, IsOutput) VALUES
 -- usp_ConfirmPayment
  ('usp_ConfirmPayment',    1, '@BookingId',      'int',            0),
  ('usp_ConfirmPayment',    2, '@RequestToken',   'uniqueidentifier', 0),
- ('usp_ConfirmPayment',    3, '@Method',         'nvarchar(20)',   0),
+ ('usp_ConfirmPayment',    3, '@Method',         'nvarchar(30)',   0),
  ('usp_ConfirmPayment',    4, '@AmountTendered', 'decimal(10,2)',  0),
  ('usp_ConfirmPayment',    5, '@ReferenceNumber','nvarchar(50)',   0),
  ('usp_ConfirmPayment',    6, '@ProcessedBy',    'int',            0),
