@@ -197,3 +197,61 @@ BEGIN
 END
 
 GO
+
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+GO
+
+CREATE OR ALTER PROCEDURE usp_CancelBooking
+    @BookingId    INT,
+    @Reason       NVARCHAR(200),
+    @CancelledBy  INT
+AS
+BEGIN
+  SET NOCOUNT ON;
+  SET XACT_ABORT ON;
+
+  BEGIN TRY
+    BEGIN TRANSACTION;
+
+      -- LO-01: Bookings row locked first, consistently with every other procedure.
+      DECLARE @Status NVARCHAR(20), @Total DECIMAL(10,2), @StartsAt DATETIME2;
+      SELECT @Status = b.Status, @Total = b.TotalAmount, @StartsAt = st.StartsAt
+      FROM Bookings b WITH (UPDLOCK, HOLDLOCK)
+      INNER JOIN Showtimes st ON st.ShowtimeId = b.ShowtimeId
+      WHERE b.BookingId = @BookingId;
+
+      IF @Status IS NULL         THROW 50010, 'Booking not found.', 1;
+      IF @Status = 'CANCELLED'   THROW 50030, 'Booking is already cancelled.', 1;
+      IF @Status = 'EXPIRED'     THROW 50031, 'Booking already expired.', 1;
+      IF @Status = 'CONFIRMED' AND DATEDIFF(MINUTE, SYSUTCDATETIME(), @StartsAt) < 60
+          THROW 50032, 'Cancellation is not allowed within one hour of the showtime.', 1;
+
+      -- Refund only applies to money actually taken.
+      DECLARE @Refund DECIMAL(10,2) = CASE WHEN @Status = 'CONFIRMED' THEN @Total ELSE 0 END;
+
+      IF @Status = 'CONFIRMED'
+          UPDATE Payments SET Status = 'REFUNDED'
+          WHERE BookingId = @BookingId AND Status = 'PAID';
+
+      -- INV-04: seats return to inventory in this same transaction.
+      DELETE FROM ShowtimeSeatLocks WHERE BookingId = @BookingId;
+
+      -- INV-05: ExpiresAt cleared alongside the status change.
+      UPDATE Bookings SET Status = 'CANCELLED', ExpiresAt = NULL
+      WHERE BookingId = @BookingId;
+
+      INSERT INTO AuditLogs (UserId, Action, EntityName, EntityId, Details)
+      VALUES (@CancelledBy, 'BOOKING_CANCELLED', 'Booking', @BookingId,
+              CONCAT('Prior=', @Status, '; Refund=', @Refund, '; Reason=', @Reason));
+
+    COMMIT TRANSACTION;
+    SELECT @BookingId AS BookingId, @Refund AS RefundAmount;
+  END TRY
+  BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    THROW;
+  END CATCH
+END
+
+GO
