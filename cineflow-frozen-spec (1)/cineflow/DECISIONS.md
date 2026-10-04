@@ -226,3 +226,39 @@ Pushing on that surfaced a **real deadlock path** that no review round had found
 **Consequence.** Msg 1934 is a runner misconfiguration, never a test result. Never "fix" it by dropping a filtered index.
 
 **Found by.** Agent report, M1. `err=229` proved the security model intact underneath.
+
+---
+
+## D-018 — `usp_ConfirmPayment.@Method` is `NVARCHAR(30)`
+
+**Context.** Gate 2's manifest froze `nvarchar(20)`; the contract body (§5.4) and the `Payments.Method` column both say 30.
+**Decision.** 30. The manifest was the defect. A parameter narrower than its column is a latent truncation bug.
+**Found by.** M2 planning, agent report S1.
+
+---
+
+## D-019 — Purge locks `Bookings` with `UPDLOCK, HOLDLOCK`; ordered acquisition applies to inserts
+
+**Context.** The LO-01c registry listed `UPDLOCK, READPAST` for `usp_PurgeExpiredHolds`; the contract body uses `UPDLOCK, HOLDLOCK`. They cannot coexist: READPAST is only valid under READ COMMITTED / REPEATABLE READ, and HOLDLOCK is SERIALIZABLE.
+**Decision.** HOLDLOCK, matching the body and LO-01's own wording. The registry row was the defect. Ascending-`SeatId` acquisition (LO-01b) binds INSERTS into `ShowtimeSeatLocks`. Deletes in purge and cancel touch only lock rows the booking already owns; a concurrent `usp_CreateBooking` can hold only previously free keys, never those, so no wait cycle can form.
+**Proof obligation.** This is reasoning. TC-CANCEL-02 at M4 is the evidence.
+**Found by.** M2 planning, agent report S2.
+
+---
+
+## D-020 — V003 scope, form, and M2 exit
+
+**Decision.**
+1. V003 contains all 9 procedures in DATA-CONTRACT.md §4. ("6" in CURRENT_STATE.md was wrong.)
+2. Each procedure is its own batch: `SET ANSI_NULLS ON; SET QUOTED_IDENTIFIER ON; GO`, then `CREATE OR ALTER PROCEDURE ...`, then `GO`. Re-applying the whole file is safe. Procedure bodies are not altered by this.
+3. The 4 bodies in §5 are transcribed as written. `usp_CreateBooking`'s body is supplied by the reviewer. The other 4 are drafted by the agent from §4 + IMPLEMENTATION-STANDARDS.md, one per step, reviewed before apply.
+4. M2 exit = gates 1, 2 (full manifest, no SKIPPED lines) and 4 green. Gate 3 needs seed data (91010) and moves to the M3 exit, the same impossible-exit defect D-016 fixed for M1.
+**Carried forward.** `usp_Login` and `usp_CreateShowtime` are exercised by no gate. Add test cases at M3.
+
+---
+
+## D-021 — `usp_Login` takes only `@Username`; the password is verified in C#
+
+**Context.** §4 froze `usp_Login(@Username, @PasswordHash)`. BCrypt salts every hash, so a hash computed in C# never equals the stored hash. SQL cannot compare them; only `BCrypt.Verify` can.
+**Decision.** `usp_Login(@Username NVARCHAR(50))` returns 1 row: `UserId, FullName, RoleName, PasswordHash, IsActive`. It never returns an empty result (PC-01). An unknown username THROWs the same error the BLL raises for a wrong password, so the response never reveals which usernames exist. The error number is assigned in the next step. The BLL calls `BCrypt.Verify` and rejects inactive users.
+**Found by.** Reviewer, M2 planning.
