@@ -597,7 +597,7 @@ USE CineFlow;
 CREATE USER cineflow_app FOR LOGIN cineflow_app;
 
 -- Ownership chaining requires a single consistent owner.
-ALTER AUTHORIZATION ON SCHEMA::dbo TO dbo;
+-- REMOVED (D-015): Msg 15150, the dbo schema owner cannot be altered. Gate 2 asserts it instead.
 
 GRANT EXECUTE ON SCHEMA::dbo TO cineflow_app;
 DENY SELECT, INSERT, UPDATE, DELETE ON SCHEMA::dbo TO cineflow_app;
@@ -609,5 +609,7 @@ GRANT EXECUTE ON TYPE::dbo.IntList TO cineflow_app;
 ```sql
 CREATE TYPE dbo.IntList AS TABLE (Value INT PRIMARY KEY);
 ```
+
+**Every `sqlcmd` invocation against this database must pass `-I`** (D-017). Without it QUOTED_IDENTIFIER is OFF and any statement touching a table with a filtered index fails Msg 1934. A procedure created under QUOTED_IDENTIFIER OFF stores that setting and fails at runtime.
 
 **Connection string handling.** Plaintext in `App.config`; `App.config` is gitignored and `App.config.template` is committed instead. `Deploy/encrypt-config.bat` is available as a post-install step on the target machine. It is deliberately **not** a build artifact: DPAPI machine-key encryption is not portable, so encrypting on the development machine would break the application anywhere else. The primary credential control is the least-privilege grant above, which holds regardless of config encryption state.

@@ -188,3 +188,41 @@ Pushing on that surfaced a **real deadlock path** that no review round had found
 **Why.** Two models with shared training-derived priors converging is evidence that **this review method is exhausted**, not that the design is correct. All three real defects (D-006, D-007, D-010a) were found by someone starting from an angle no prior round had used — not by a closer read of the same material. Continuing to find smaller things to justify another pass is its own over-fitting problem. The structural replacement is `verify.bat`: gates that run every day regardless of who remembers to look.
 
 **Consequence:** `CURRENT_STATE.md` distinguishes **WRITTEN** from **VERIFIED**, and only a green gate promotes one to the other.
+
+---
+
+## D-015 — `ALTER AUTHORIZATION ON SCHEMA::dbo` removed; ownership is asserted, not set
+
+**Context.** DATA-CONTRACT.md §8 instructed `ALTER AUTHORIZATION ON SCHEMA::dbo TO dbo;`. It fails on every SQL Server with Msg 15150: the owner of `sys`, `dbo` and `information_schema` cannot be changed.
+
+**Decision.** Removed from V005 and the contract. Gate 2 asserts `dbo` owns schema `dbo` and throws 91002 if not. The 91002 remedy text now names `ALTER AUTHORIZATION ON OBJECT::dbo.<name> TO SCHEMA OWNER`, which actually repairs a misowned object.
+
+**Rejected.** Wrapping the impossible statement in TRY/CATCH: it hides failing DDL.
+
+**Found by.** First real execution, M1, SQL Server 2025 Express.
+
+---
+
+## D-016 — Gate 2 skips procedure checks when none exist; a partial set fails hard
+
+**Context.** Gate 2 (d)/(e) read sys.procedures. At M1 none exist, so 91005 fired and the M1 exit condition was impossible.
+
+**Decision.** Count the five contract procedures first. Zero → printed `[--] SKIPPED`, green. Some but not all → `THROW 91007 PARTIAL PROCEDURE SET`. All five → full manifest.
+
+**Why.** The real failure is four out of five, which looks like progress. Skips are always printed, never silent. During M2, 91007 firing between procedure creations is expected.
+
+**Found by.** Agent report, M1. The agent refused to edit the frozen test and escalated.
+
+---
+
+## D-017 — Every `sqlcmd` invocation passes `-I`
+
+**Context.** sqlcmd defaults QUOTED_IDENTIFIER OFF. Bookings and Payments carry filtered indexes, so CREATE INDEX and any DML on them fail Msg 1934. `ALTER DATABASE … SET QUOTED_IDENTIFIER ON` does not override sqlcmd.
+
+**Decision.** (1) verify.bat passes `-I` on all gates. (2) Every Tests/ file sets `SET QUOTED_IDENTIFIER ON;`. (3) Every migration is applied with `-I`.
+
+**Critical for M2.** A procedure created under QI OFF stores that setting and fails at runtime the first time it writes to Bookings or Payments. Every CREATE PROCEDURE must be applied with `-I`.
+
+**Consequence.** Msg 1934 is a runner misconfiguration, never a test result. Never "fix" it by dropping a filtered index.
+
+**Found by.** Agent report, M1. `err=229` proved the security model intact underneath.
