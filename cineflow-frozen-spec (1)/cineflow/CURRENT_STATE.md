@@ -1,6 +1,6 @@
 # CineFlow — Current State
 
-**Last updated:** 2026-09-28 · **Phase:** M1 not yet started · **Owner of this file:** human, with agent-proposed diffs
+**Last updated:** 2026-10-04 · **Phase:** M1 DONE, M2 CURRENT · **Owner of this file:** human, with agent-proposed diffs
 
 **This project is sequenced by dependency, not by date.** There is no deadline pressure. A milestone is finished when its gate is green — never because time has passed. If a gate is red, the correct action is always to stop and fix it, never to move on and come back.
 
@@ -26,37 +26,37 @@ This file is the answer to "what already exists?" Read it before starting any ta
 |---|---|
 | `DATA-CONTRACT.md` | **FROZEN** — schema, constraints, indexes, procedure signatures, error registry, test specs |
 | `IMPLEMENTATION-STANDARDS.md` | **FROZEN** — IS-01…IS-05, LO-01 (+ Addendum A), PC-01, VG-01 |
-| `DECISIONS.md` | Live decision log, 12 entries |
+| `DECISIONS.md` | Live decision log, 15 entries (D-015, D-016, D-017 added 2026-10-04) |
 | `Docs/WEEK0-DEFENSE-PACK.md` | Scope, topology, demo runbook (its day numbers are superseded by §6) |
 | `AGENTS.md` | Agent entry point |
 
 Frozen means: propose changes, do not make them.
 
-## 2. Database — NOT STARTED
+## 2. Database — M1 VERIFIED 2026-10-04
 
 | Item | Status | Notes |
 |---|---|---|
 | SQL Server instance | **CONFIRMED 2026-09-28** | `.\SQLEXPRESS` — SQL Server 2025 Express. Proven by a successful `sqlcmd -S .\SQLEXPRESS -Q "SELECT @@SERVERNAME"`. Use this exact string in every migration, gate, and connection string. |
-| `CineFlow` database | NOT STARTED | |
-| `V001__schema.sql` — 11 tables, `dbo.IntList` | NOT STARTED | DDL exists in the contract as **WRITTEN** text only |
-| `V002__indexes.sql` | NOT STARTED | |
+| `CineFlow` database | **VERIFIED** | Tables = 11. Rebuilt from clean 2026-10-04 (prior hand-repaired state dropped: database + `cineflow_app` login). |
+| `V001__schema.sql` — 11 tables, `dbo.IntList` | **VERIFIED** | Gate 2(c) green: every frozen constraint/index present. 16 CHECKs, all `is_disabled = 0`, `is_not_trusted = 0`. |
+| `V002__indexes.sql` | **VERIFIED** | 26 indexes on user tables (`sys.indexes` type > 0). |
 | `V003__stored_procs.sql` — 6 procedures | NOT STARTED | Bodies exist in the contract as **WRITTEN** text only |
 | `V004__seed.sql` | NOT STARTED | |
-| `V005__security.sql` — `cineflow_app` | NOT STARTED | |
+| `V005__security.sql` — `cineflow_app` | **VERIFIED** | Login + user present; 7 permission rows. Gate 4 green. |
 
-**Nothing in `DATA-CONTRACT.md` has ever been parsed by a SQL Server.** Expect syntax errors, wrong column names, type mismatches on first run. Finding them is the purpose of M1, not a sign of failure.
+**M1 evidence (2026-10-04, `sqlcmd -b -I`, exit codes as observed).** Gate 1 OK (0). Gate 2 OK (0): ownership OK, schema-dbo-owned asserted per D-015 OK, constraints trusted OK, contract OK, signatures/defaults `[--] SKIPPED` per D-016. Gate 4 OK (0). Gate 3 FAIL 91010 (exit 1, expected: no procs/seed). Gate 5 FAIL 91010 (exit 1, expected: no procs/seed). Catalog: 11 tables, 16 CHECKs trusted, 26 indexes, 7 permission rows.
 
-## 3. Verification harness — WRITTEN, never executed
+## 3. Verification harness — M1 gates green 2026-10-04 (gates 1, 2, 4)
 
 | Gate | File | Status |
 |---|---|---|
-| 1 | `Tests/01_static_sql_scan.sql` | WRITTEN |
-| 2 | `Tests/02_ownership_and_constraints.sql` | WRITTEN — ownership, trusted constraints, contract drift, per-parameter signature manifest, optionality |
-| 3 | `Tests/03_smoke_as_app.sql` | WRITTEN |
-| 4 | `Tests/04_security_denials.sql` | WRITTEN |
-| 5 | `Tests/05_invariants.sql` | WRITTEN |
+| 1 | `Tests/01_static_sql_scan.sql` | **VERIFIED** — OK (exit 0) 2026-10-04: no dynamic SQL (heuristic) |
+| 2 | `Tests/02_ownership_and_constraints.sql` | **VERIFIED** — OK (exit 0) 2026-10-04: ownership OK, schema-dbo asserted (D-015) OK, trusted OK, contract OK, (d)/(e) SKIPPED printed (D-016), zero procs |
+| 3 | `Tests/03_smoke_as_app.sql` | Expected FAIL 91010 (exit 1): needs procs + seed (M2/M3). Not a defect. |
+| 4 | `Tests/04_security_denials.sql` | **VERIFIED** — OK (exit 0) 2026-10-04: all direct access denied |
+| 5 | `Tests/05_invariants.sql` | Expected FAIL 91010 (exit 1): needs procs + seed (M2/M3). Not a defect. |
 | 6 | `Tests/Concurrency/BookingConcurrencyTests.cs` | WRITTEN, **never compiled** |
-| runner | `Deploy/verify.bat` | WRITTEN |
+| runner | `Deploy/verify.bat` | **VERIFIED** — gates 1, 2 pass, stops at gate 3 (exit 1) as designed; all `sqlcmd` lines carry `-I` (D-017) |
 
 **Known incomplete:** `BookingConcurrencyTests.cs` references `TestFixture` and `ContractScenarios`, which are **declared but not implemented**. They must be built at M3 before gate 6 can run. This is a known gap, not a bug to discover.
 
@@ -106,8 +106,8 @@ Each phase ends at a gate. **Do not begin a phase until the previous gate is gre
 | # | Phase | Depends on | Exit gate | Status |
 |---|---|---|---|---|
 | M0 | Specification frozen | — | Four artifacts written and reviewed | **DONE** |
-| M1 | Schema + security | M0 | `verify.bat` gates 1, 2, 4 pass | **CURRENT** |
-| M2 | Stored procedures | M1 (tables must exist) | gates 1, 2, 3 pass | pending |
+| M1 | Schema + security | M0 | `verify.bat` gates 1, 2, 4 pass | **DONE (2026-10-04)** |
+| M2 | Stored procedures | M1 (tables must exist) | gates 1, 2, 3 pass | **CURRENT** |
 | M3 | Seed + invariants | M2 (procs write the data) | all 5 SQL gates pass | pending |
 | M4 | **Concurrency proof** | M3 (needs real rows) | TC-CONC-01/02, TC-CANCEL-01/02, TC-PURGE, TC-PAY all green | pending |
 | M5 | Data + business layers | M4 (contract proven before wrapping it) | unit tests pass; no SQL above the DAL | pending |
@@ -146,4 +146,15 @@ Agents **propose** a diff in the task report; the human applies it. Rules:
 - Never delete a risk row. Move it to resolved with the date and the test that closed it.
 - Update the phase header line at the top on every change.
 - Record milestones by **gate result**, never by elapsed time.
+
+**Unproven / carried forward (M1, 2026-10-04).**
+
+a. V001/V002/V005 apply exit codes were not captured (state verified by gate 2, not by apply log). Covered by rebuild script at M7.
+
+b. Gate 2 path 91007 (partial procedure set): first exercised at M2.
+
+c. Gate 2 section (e) default/optional check: compiles, first runs at M2.
+
+d. `verify.bat` failure banner still says 'today's work': cosmetic.
+
 - Keep this file **short**. It is read every session; if it grows past ~200 lines it stops being read, which defeats its purpose. Detail belongs in `DATA-CONTRACT.md` or `DECISIONS.md`.
