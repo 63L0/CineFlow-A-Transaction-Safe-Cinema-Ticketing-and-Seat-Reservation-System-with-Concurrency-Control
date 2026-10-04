@@ -44,3 +44,32 @@ BEGIN
 END
 
 GO
+
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+GO
+
+CREATE OR ALTER PROCEDURE usp_GetSeatMap @ShowtimeId INT
+AS
+BEGIN
+  SET NOCOUNT ON;
+
+  -- Cheap seek against IX_Bookings_PendingExpiry. Opens a write transaction
+  -- only when expired holds actually exist -- not once per read.
+  IF EXISTS (SELECT 1 FROM Bookings
+             WHERE Status = 'PENDING' AND ExpiresAt < SYSUTCDATETIME())
+      EXEC usp_PurgeExpiredHolds;
+
+  SELECT s.SeatId, s.RowLabel, s.SeatNumber, s.SeatType,
+         CASE WHEN s.IsUsable = 0        THEN 'UNUSABLE'
+              WHEN b.Status = 'CONFIRMED' THEN 'SOLD'
+              WHEN l.SeatId IS NOT NULL   THEN 'HELD'
+              ELSE 'AVAILABLE' END AS SeatStatus
+  FROM Seats s
+  INNER JOIN Showtimes st ON st.ScreenId = s.ScreenId AND st.ShowtimeId = @ShowtimeId
+  LEFT  JOIN ShowtimeSeatLocks l ON l.SeatId = s.SeatId AND l.ShowtimeId = @ShowtimeId
+  LEFT  JOIN Bookings b ON b.BookingId = l.BookingId
+  ORDER BY s.RowLabel, s.SeatNumber;
+END
+
+GO
