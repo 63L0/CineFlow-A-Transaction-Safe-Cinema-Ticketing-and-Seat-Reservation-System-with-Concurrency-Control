@@ -191,11 +191,11 @@ Deadlock requires two transactions acquiring two resources in opposite order. Tw
 
 1. **Across tables** — any procedure that touches both `Bookings` and `ShowtimeSeatLocks` acquires `Bookings` **first**. This binds `usp_CancelBooking`, `usp_PurgeExpiredHolds`, and the guarded purge inside `usp_GetSeatMap`, all of which update an existing `Bookings` row. It is vacuous for `usp_CreateBooking`, whose `Bookings` row is new — stated here so nobody claims it as protection it does not provide.
 
-2. **Within `ShowtimeSeatLocks`** — when a procedure touches more than one seat, keys are acquired in **ascending `SeatId` order**. This clause was missing, and its absence is a real deadlock path: booking A taking seats 1,2,3 while booking B takes 3,2,1 deadlocks, and the losing session dies with error **1205**, not a clean 50001.
+2. **Within `ShowtimeSeatLocks`** — when a procedure inserts more than one seat key, keys are acquired in **ascending `SeatId` order**. This clause was missing, and its absence is a real deadlock path: booking A taking seats 1,2,3 while booking B takes 3,2,1 deadlocks, and the losing session dies with error **1205**, not a clean 50001. Deletes of lock rows a booking already owns are exempt (D-019).
 
 > `INSERT … SELECT … ORDER BY` does **not** guarantee acquisition order. The `ORDER BY` constrains the result set, not the order the engine takes locks.
 >
-> **Required pattern** — materialize ordered, then insert from the ordered set, in every procedure that touches multiple seat keys (`usp_CreateBooking`, `usp_CancelBooking`, `usp_PurgeExpiredHolds`):
+> **Required pattern** — materialize ordered, then insert from the ordered set, in every procedure that inserts multiple seat keys (`usp_CreateBooking`). Cancel and purge only delete lock rows the booking already owns, so they need no ordering (D-019):
 >
 > ```sql
 > DECLARE @Ordered TABLE (Seq INT IDENTITY(1,1) PRIMARY KEY, SeatId INT NOT NULL);
@@ -216,7 +216,7 @@ Every write path, in the order it takes locks. Adding a procedure that touches t
 |---|---|---|---|---|
 | `usp_CreateBooking` | `Bookings` (new row, uncontended) | `ShowtimeSeatLocks` asc `SeatId` | — | Serialization is `PK_SeatLock`, not the `Bookings` insert |
 | `usp_ConfirmPayment` | `Bookings` (`UPDLOCK, HOLDLOCK`) | `Payments` | — | Never touches `ShowtimeSeatLocks` |
-| `usp_CancelBooking` | `Bookings` (`UPDLOCK, HOLDLOCK`) | `ShowtimeSeatLocks` asc `SeatId` | — | Delete is in the same transaction as the status change |
+| `usp_CancelBooking` | `Bookings` (`UPDLOCK, HOLDLOCK`) | `ShowtimeSeatLocks` (deletes owned rows only; no ordering required, D-019) | — | Delete is in the same transaction as the status change |
 | `usp_PurgeExpiredHolds` | `Bookings` (`UPDLOCK, HOLDLOCK`) | `ShowtimeSeatLocks` (deletes owned rows only; no ordering required, D-019) | — | Matches the §5.1 body. `READPAST` cannot be combined with `HOLDLOCK` (D-019) |
 | `usp_GetSeatMap` | guard: `SELECT … READCOMMITTED` (no lock held) | then `usp_PurgeExpiredHolds` order if work exists | — | The guard exists so a clean read takes no write lock |
 
