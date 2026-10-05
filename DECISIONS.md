@@ -322,3 +322,15 @@ Pushing on that surfaced a **real deadlock path** that no review round had found
 **Why.** A cancelled or past showtime must never be sellable. An unknown showtime gets a clear message instead of 50004.
 
 ---
+
+## D-028 — §5.4 amended: two `END` → `END;` before THROW
+
+**Context.** The first apply of `usp_ConfirmPayment` failed with Msg 102 "Incorrect syntax near 'THROW'" at procedure lines 96 and 99. T-SQL requires the statement before THROW to be terminated with a semicolon. In the §5.4 CATCH block, `THROW 50021` and the final `THROW;` each followed a block ending in a bare `END`.
+
+**Decision.** In §5.4 those two `END`s become `END;`. Nothing else changes. V003 receives the identical edit. This amends D-020 point 3 ("transcribed as written") for §5.4 only.
+
+**Why.** It is the smallest change that makes the body parse, and the behavior is identical.
+
+**Lesson.** The §5 bodies were never parsed by SQL Server before they were frozen. The first apply is the first parse check.
+
+---

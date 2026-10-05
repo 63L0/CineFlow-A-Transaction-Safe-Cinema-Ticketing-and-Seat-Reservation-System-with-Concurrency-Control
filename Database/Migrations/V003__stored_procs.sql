@@ -351,11 +351,11 @@ BEGIN
         BEGIN
             SELECT @Winner AS PaymentId, CAST(1 AS BIT) AS WasDuplicate;
             RETURN;
-        END
+        END;
 
         -- Some other unique constraint fired. Never return empty (PC-01).
         THROW 50021, 'Payment could not be recorded: this booking already has an active payment.', 1;
-    END
+    END;
 
     THROW;
   END CATCH
