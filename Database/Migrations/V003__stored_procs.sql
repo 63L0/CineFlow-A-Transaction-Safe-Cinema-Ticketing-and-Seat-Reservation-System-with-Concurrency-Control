@@ -417,3 +417,66 @@ BEGIN
 END
 
 GO
+
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+GO
+
+CREATE OR ALTER PROCEDURE usp_CreateShowtime
+    @MovieId   INT,
+    @ScreenId  INT,
+    @StartsAt  DATETIME2,
+    @BasePrice DECIMAL(10,2),
+    @CreatedBy INT
+AS
+BEGIN
+  SET NOCOUNT ON;
+  SET XACT_ABORT ON;
+
+  DECLARE @DurationMin INT, @EndsAt DATETIME2, @ShowtimeId INT;
+
+  BEGIN TRY
+    BEGIN TRANSACTION;
+
+      SELECT @DurationMin = DurationMin
+      FROM Movies
+      WHERE MovieId = @MovieId AND IsActive = 1;
+
+      IF @DurationMin IS NULL
+        THROW 50041, 'Movie not found or inactive.', 1;
+
+      IF NOT EXISTS (SELECT 1 FROM Screens WHERE ScreenId = @ScreenId)
+        THROW 50042, 'Screen not found.', 1;
+
+      IF @StartsAt <= SYSUTCDATETIME()
+        THROW 50043, 'A showtime cannot start in the past.', 1;
+
+      SET @EndsAt = DATEADD(MINUTE, @DurationMin + 20, @StartsAt);
+
+      -- INV-11 / D-030: range-locks this screen's slots; Cancelled showtimes do not block.
+      IF EXISTS (SELECT 1 FROM Showtimes WITH (UPDLOCK, HOLDLOCK)
+                 WHERE ScreenId = @ScreenId AND Status <> 'Cancelled'
+                   AND StartsAt < @EndsAt AND EndsAt > @StartsAt)
+        THROW 50040, 'This screen already has a showtime overlapping that slot.', 1;
+
+      INSERT INTO Showtimes (MovieId, ScreenId, StartsAt, EndsAt, BasePrice)
+      VALUES (@MovieId, @ScreenId, @StartsAt, @EndsAt, @BasePrice);
+      SET @ShowtimeId = SCOPE_IDENTITY();
+
+      INSERT INTO AuditLogs (UserId, Action, EntityName, EntityId, Details)
+      VALUES (@CreatedBy, 'SHOWTIME_CREATED', 'Showtime', @ShowtimeId,
+              CONCAT('Movie=', @MovieId, '; Screen=', @ScreenId, '; Starts=', @StartsAt, '; Price=', @BasePrice));
+    COMMIT TRANSACTION;
+
+    SELECT @ShowtimeId AS ShowtimeId;
+  END TRY
+  BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    -- D-030: a same-start clash with a Cancelled showtime hits UQ_Showtime_Slot.
+    IF ERROR_NUMBER() IN (2627, 2601)
+      THROW 50040, 'This screen already has a showtime overlapping that slot.', 1;
+    THROW;
+  END CATCH
+END
+
+GO

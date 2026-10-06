@@ -120,7 +120,7 @@ PRINT '  [OK] contract   all frozen constraints and indexes present';
 DECLARE @ContractProcs TABLE (ProcName SYSNAME);
 INSERT INTO @ContractProcs VALUES
     ('usp_CreateBooking'), ('usp_ConfirmPayment'), ('usp_CancelBooking'),
-    ('usp_GetSeatMap'),    ('usp_PurgeExpiredHolds'), ('usp_Login'), ('usp_SearchMovies');
+    ('usp_GetSeatMap'),    ('usp_PurgeExpiredHolds'), ('usp_Login'), ('usp_SearchMovies'), ('usp_CreateShowtime');
 
 DECLARE @ProcsPresent INT = (
     SELECT COUNT(*) FROM sys.procedures p
@@ -175,7 +175,13 @@ INSERT INTO @Expected (ProcName, Ordinal, ParamName, Decl, IsOutput) VALUES
  ('usp_SearchMovies',      1, '@Title',          'nvarchar(200)',  0),
  ('usp_SearchMovies',      2, '@Genre',          'nvarchar(60)',   0),
  ('usp_SearchMovies',      3, '@Rating',         'nvarchar(10)',   0),
- ('usp_SearchMovies',      4, '@IsActive',       'bit',            0);
+ ('usp_SearchMovies',      4, '@IsActive',       'bit',            0),
+-- usp_CreateShowtime
+ ('usp_CreateShowtime',    1, '@MovieId',        'int',            0),
+ ('usp_CreateShowtime',    2, '@ScreenId',       'int',            0),
+ ('usp_CreateShowtime',    3, '@StartsAt',       'datetime2',      0),
+ ('usp_CreateShowtime',    4, '@BasePrice',      'decimal(10,2)',  0),
+ ('usp_CreateShowtime',    5, '@CreatedBy',      'int',            0);
 -- usp_PurgeExpiredHolds intentionally takes no parameters.
 
 DECLARE @Actual TABLE (
@@ -275,7 +281,12 @@ INSERT INTO @Optionality VALUES
     ('usp_SearchMovies',   '@Title',           1),
     ('usp_SearchMovies',   '@Genre',           1),
     ('usp_SearchMovies',   '@Rating',          1),
-    ('usp_SearchMovies',   '@IsActive',        1);
+    ('usp_SearchMovies',   '@IsActive',        1),
+    ('usp_CreateShowtime', '@MovieId',         0),
+    ('usp_CreateShowtime', '@ScreenId',        0),
+    ('usp_CreateShowtime', '@StartsAt',        0),
+    ('usp_CreateShowtime', '@BasePrice',       0),
+    ('usp_CreateShowtime', '@CreatedBy',       0);
 
 DECLARE @OptViolations TABLE (ProcName SYSNAME, ParamName SYSNAME, Problem NVARCHAR(60));
 
