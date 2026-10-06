@@ -368,3 +368,15 @@ Pushing on that surfaced a **real deadlock path** that no review round had found
 **Found by.** Reviewer, M2 drafting of `usp_CreateShowtime`; approved by Gelo.
 
 ---
+
+## D-031 — `usp_GetSalesReport`: parameters, local day, PAID only, row shape
+
+**Context.** Section 4 froze only `usp_GetSalesReport(@FromDate, @ToDate)` returning "result set". The parameter types, which day a payment belongs to, what counts as a sale, and the columns were undefined. `Payments.PaidAt` is stored in UTC (`SYSUTCDATETIME()`), so grouping by UTC date would move early-morning Philippine sales to the previous day.
+**Decision.**
+1. `@FromDate DATE`, `@ToDate DATE`, both required. The range includes both days.
+2. The dates are Philippine local dates (UTC+8, no daylight saving). The procedure converts them to a UTC range and groups by the local date of `PaidAt`.
+3. Only payments with `Status = 'PAID'` count. `REFUNDED` and `VOID` are excluded.
+4. Result set, may be empty (not PC-01): one row per local day per movie, `SalesDate, MovieId, Title, TicketsSold, GrossRevenue`, ordered by `SalesDate, Title`. `GrossRevenue` sums `Payments.Amount`; `TicketsSold` counts the paid bookings' `BookingSeats` rows. `@FromDate > @ToDate` returns no rows; no new error number.
+**Found by.** Reviewer, M2 drafting of `usp_GetSalesReport`; approved by Gelo.
+
+---

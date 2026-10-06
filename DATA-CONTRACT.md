@@ -265,7 +265,7 @@ Conditional rules are part of the signature. A parameter's nullability in the de
 | `usp_ConfirmPayment` | `@BookingId`, `@RequestToken`, `@Method`, `@AmountTendered=NULL`, `@ReferenceNumber=NULL`, `@ProcessedBy` | **`@AmountTendered`: REQUIRED when `@Method='Cash'`, MUST be NULL otherwise, MUST be ≥ booking total.** **`@ReferenceNumber`: REQUIRED when `@Method<>'Cash'`, MUST be NULL otherwise.** Total is derived from `Bookings`, never passed in. | 1 row: `PaymentId, WasDuplicate` |
 | `usp_CancelBooking` | `@BookingId`, `@Reason`, `@CancelledBy` | deletes lock rows in the same transaction | 1 row: `BookingId, RefundAmount` |
 | `usp_PurgeExpiredHolds` | — | affects `Status='PENDING'` rows only | 1 row: `PurgedCount` |
-| `usp_GetSalesReport` | `@FromDate`, `@ToDate` | — | result set |
+| `usp_GetSalesReport` | `@FromDate DATE`, `@ToDate DATE` | both required, inclusive, Philippine local dates (UTC+8); `PAID` payments only; `@FromDate > @ToDate` returns no rows (D-031) | result set (may be empty): one row per day per movie, `SalesDate, MovieId, Title, TicketsSold, GrossRevenue` |
 
 **Note on result sets vs PC-01.** PC-01 governs *scalar-outcome* procedures — those returning an identity or an outcome flag. Query procedures (`usp_SearchMovies`, `usp_GetSeatMap`, `usp_GetSalesReport`) may legitimately return zero rows, because "no matches" is a valid answer rather than a fault. The distinction is fixed here and is not an agent judgement call: the procedures listed above as returning **"1 row"** are PC-01 procedures. Those listed as returning **"result set"** are not.
 
