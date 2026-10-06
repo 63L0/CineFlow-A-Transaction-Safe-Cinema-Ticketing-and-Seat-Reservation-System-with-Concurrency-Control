@@ -391,3 +391,29 @@ BEGIN
 END
 
 GO
+
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+GO
+
+CREATE OR ALTER PROCEDURE usp_SearchMovies
+    @Title    NVARCHAR(200) = NULL,
+    @Genre    NVARCHAR(60)  = NULL,
+    @Rating   NVARCHAR(10)  = NULL,
+    @IsActive BIT           = NULL
+AS
+BEGIN
+  SET NOCOUNT ON;
+
+  -- IS-01 / D-004: static optional filters. Result set, may be empty (not PC-01).
+  SELECT MovieId, Title, Genre, DurationMin, Rating, IsActive
+  FROM Movies
+  WHERE (@Title    IS NULL OR Title LIKE '%' + @Title + '%')
+    AND (@Genre    IS NULL OR Genre = @Genre)
+    AND (@Rating   IS NULL OR Rating = @Rating)
+    AND (@IsActive IS NULL OR IsActive = @IsActive)
+  ORDER BY Title
+  OPTION (RECOMPILE);
+END
+
+GO
