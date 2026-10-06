@@ -334,3 +334,13 @@ Pushing on that surfaced a **real deadlock path** that no review round had found
 **Lesson.** The §5 bodies were never parsed by SQL Server before they were frozen. The first apply is the first parse check.
 
 ---
+
+## D-029 — Gate 2 optionality check reads only the parameter list
+
+**Context.** Gate 2's optionality check matched `'%' + ParamName + '%= NULL%'` against the whole procedure text. Any `= NULL` after the name, such as `ExpiresAt = NULL` in a body, counted as a default. So every required parameter of `usp_CreateBooking`, `usp_CancelBooking` and `usp_ConfirmPayment` was reported as "gained a default" (Msg 91006). The check had never run before, because gate 2 stopped at PARTIAL PROCEDURE SET until all 5 contract procedures existed.
+
+**Decision.** The check now reads only the parameter list (the text before the first line that is `AS`), and only the segment from the parameter's name to the next `@`. `@CreatedBy` (`usp_CreateBooking`) and `@CancelledBy` (`usp_CancelBooking`) are added to the optionality manifest as required.
+
+**Why.** The procedures were correct and the test was not. Fixing the detector is the smallest change that makes the gate tell the truth. It is still a heuristic; TC-PAY-03/04 remain the binding proof.
+
+---

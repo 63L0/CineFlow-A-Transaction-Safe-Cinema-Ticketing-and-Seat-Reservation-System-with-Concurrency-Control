@@ -260,8 +260,10 @@ INSERT INTO @Optionality VALUES
     ('usp_CreateBooking',  '@UserId',          0),
     ('usp_CreateBooking',  '@ShowtimeId',      0),
     ('usp_CreateBooking',  '@SeatIds',         0),
+    ('usp_CreateBooking',  '@CreatedBy',       0),
     ('usp_CancelBooking',  '@BookingId',       0),
-    ('usp_CancelBooking',  '@Reason',          0);
+    ('usp_CancelBooking',  '@Reason',          0),
+    ('usp_CancelBooking',  '@CancelledBy',     0);
 
 DECLARE @OptViolations TABLE (ProcName SYSNAME, ParamName SYSNAME, Problem NVARCHAR(60));
 
@@ -273,11 +275,19 @@ SELECT o.ProcName, o.ParamName,
 FROM @Optionality o
 JOIN sys.procedures p  ON p.name = o.ProcName
 JOIN sys.sql_modules m ON m.object_id = p.object_id
+-- D-029: look only at the parameter list (text before the first line that is AS),
+-- and only from the parameter's name up to the next '@'. Searching the whole
+-- definition matched body text such as "ExpiresAt = NULL".
+CROSS APPLY (SELECT Hdr = LEFT(m.definition,
+    PATINDEX('%' + CHAR(10) + 'AS[' + CHAR(13) + CHAR(10) + ' ]%', m.definition))) h
+CROSS APPLY (SELECT P = CHARINDEX(o.ParamName + ' ', h.Hdr)) a
+CROSS APPLY (SELECT Seg = CASE WHEN a.P = 0 THEN '' ELSE SUBSTRING(h.Hdr, a.P,
+    CASE WHEN CHARINDEX('@', h.Hdr, a.P + 1) > 0
+         THEN CHARINDEX('@', h.Hdr, a.P + 1) - a.P
+         ELSE LEN(h.Hdr) - a.P + 1 END) END) s
 WHERE
-    -- matches "@Param <type> = NULL" allowing one or two spaces around '='
     -- T-SQL has no boolean type; materialise the predicate through CASE.
-    CASE WHEN m.definition LIKE '%' + o.ParamName + '%= NULL%'
-              OR m.definition LIKE '%' + o.ParamName + '%=NULL%'
+    CASE WHEN s.Seg LIKE '%= NULL%' OR s.Seg LIKE '%=NULL%'
          THEN 1 ELSE 0 END
     <> o.MustBeOptional;
 
