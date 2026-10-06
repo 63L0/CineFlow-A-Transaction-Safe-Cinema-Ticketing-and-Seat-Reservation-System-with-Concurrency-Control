@@ -356,3 +356,15 @@ Pushing on that surfaced a **real deadlock path** that no review round had found
 **Note.** Recorded after D-024..D-029; the number was reserved earlier.
 
 ---
+
+## D-030 — `usp_CreateShowtime`: `@CreatedBy`, errors 50041–50043, cancelled slots
+
+**Context.** Section 4 froze `usp_CreateShowtime(@MovieId, @ScreenId, @StartsAt, @BasePrice)` with one error (50040). It had no actor, so its AuditLogs row (IS-04) could not record who created the showtime. An unknown or inactive movie, an unknown screen, and a start time in the past had no registered error and would surface as raw engine errors.
+**Decision.**
+1. The signature becomes `usp_CreateShowtime(@MovieId INT, @ScreenId INT, @StartsAt DATETIME2, @BasePrice DECIMAL(10,2), @CreatedBy INT)`, all required. `@CreatedBy` is written to `AuditLogs.UserId`.
+2. New errors: 50041 "Movie not found or inactive.", 50042 "Screen not found.", 50043 "A showtime cannot start in the past." The past check uses the same clock as the 50006 check in `usp_CreateBooking`.
+3. Showtimes with `Status = 'Cancelled'` do not block the overlap check (INV-11). A new showtime with the same start as a cancelled one on the same screen still violates `UQ_Showtime_Slot`; the procedure reports that as 50040.
+4. LO-01c gains a row: `Showtimes` range on the screen under `UPDLOCK, HOLDLOCK`. The procedure never touches `Bookings` or `ShowtimeSeatLocks`.
+**Found by.** Reviewer, M2 drafting of `usp_CreateShowtime`; approved by Gelo.
+
+---
