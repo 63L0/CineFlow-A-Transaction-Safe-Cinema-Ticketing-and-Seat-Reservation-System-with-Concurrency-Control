@@ -344,3 +344,15 @@ Pushing on that surfaced a **real deadlock path** that no review round had found
 **Why.** The procedures were correct and the test was not. Fixing the detector is the smallest change that makes the gate tell the truth. It is still a heuristic; TC-PAY-03/04 remain the binding proof.
 
 ---
+
+## D-023 — Each drafted procedure joins gate 2 in the same step
+
+**Context.** Gate 2's `@ContractProcs` list and its signature (`@Expected`) and optionality (`@Optionality`) manifests cover only the 5 §5 procedures. D-020 point 4 requires the full manifest at the M2 exit. Without this rule, `usp_Login`, `usp_SearchMovies`, `usp_CreateShowtime` and `usp_GetSalesReport` would ship with no gate checking their signatures.
+
+**Decision.** Each of those 4 procedures is added in one step, together with its `@ContractProcs` row, its `@Expected` signature rows and its `@Optionality` rows, all derived from §4. A draft is not reviewed without them. The apply follows as a separate step.
+
+**Why.** A procedure the gate does not know about can drift silently. Adding the manifest rows in the same step makes gate 2 go red if the draft and the contract disagree.
+
+**Note.** Recorded after D-024..D-029; the number was reserved earlier.
+
+---
