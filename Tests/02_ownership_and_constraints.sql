@@ -179,7 +179,7 @@ INSERT INTO @Expected (ProcName, Ordinal, ParamName, Decl, IsOutput) VALUES
 -- usp_CreateShowtime
  ('usp_CreateShowtime',    1, '@MovieId',        'int',            0),
  ('usp_CreateShowtime',    2, '@ScreenId',       'int',            0),
- ('usp_CreateShowtime',    3, '@StartsAt',       'datetime2',      0),
+ ('usp_CreateShowtime',    3, '@StartsAt',       'datetime2(7)',   0),
  ('usp_CreateShowtime',    4, '@BasePrice',      'decimal(10,2)',  0),
  ('usp_CreateShowtime',    5, '@CreatedBy',      'int',            0);
 -- usp_PurgeExpiredHolds intentionally takes no parameters.
