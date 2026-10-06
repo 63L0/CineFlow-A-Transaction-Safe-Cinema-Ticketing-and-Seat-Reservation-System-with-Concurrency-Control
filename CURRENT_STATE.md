@@ -1,6 +1,6 @@
 # CineFlow — Current State
 
-**Last updated:** 2026-10-06 · **Phase:** M1 DONE, M2 CURRENT (5 of 9 procedures VERIFIED) · **Owner of this file:** human, with agent-proposed diffs
+**Last updated:** 2026-10-06 · **Phase:** M1 DONE, M2 DONE (2026-10-06), M3 CURRENT · **Owner of this file:** human, with agent-proposed diffs
 
 **This project is sequenced by dependency, not by date.** There is no deadline pressure. A milestone is finished when its gate is green — never because time has passed. If a gate is red, the correct action is always to stop and fix it, never to move on and come back.
 
@@ -26,7 +26,7 @@ This file is the answer to "what already exists?" Read it before starting any ta
 |---|---|
 | `DATA-CONTRACT.md` | **FROZEN** — schema, constraints, indexes, procedure signatures, error registry, test specs |
 | `IMPLEMENTATION-STANDARDS.md` | **FROZEN** — IS-01…IS-05, LO-01 (+ Addendum A), PC-01, VG-01 |
-| `DECISIONS.md` | Live decision log, 28 entries (D-023 to D-029 added 2026-10-06) |
+| `DECISIONS.md` | Live decision log, 30 entries (D-023 to D-029 added 2026-10-06; D-030, D-031 added 2026-10-06) |
 | `Docs/WEEK0-DEFENSE-PACK.md` | Scope, topology, demo runbook (its day numbers are superseded by §6) |
 | `AGENTS.md` | Agent entry point |
 
@@ -40,7 +40,7 @@ Frozen means: propose changes, do not make them.
 | `CineFlow` database | **VERIFIED** | Tables = 11. Rebuilt from clean 2026-10-04 (prior hand-repaired state dropped: database + `cineflow_app` login). |
 | `V001__schema.sql` — 11 tables, `dbo.IntList` | **VERIFIED** | Gate 2(c) green: every frozen constraint/index present. 16 CHECKs, all `is_disabled = 0`, `is_not_trusted = 0`. |
 | `V002__indexes.sql` | **VERIFIED** | 26 indexes on user tables (`sys.indexes` type > 0). |
-| `V003__stored_procs.sql` — 9 procedures (D-020) | **PARTIAL: 5 of 9 VERIFIED** | Applied twice (re-runnable); gate 2 green incl. signatures + defaults. Contract 5: PurgeExpiredHolds, GetSeatMap, CreateBooking (reviewer body, D-025..D-027), CancelBooking, ConfirmPayment (D-028 fix). Remaining 4 (Login, SearchMovies, CreateShowtime, GetSalesReport): NOT STARTED; each one ships with its gate 2 manifest rows (D-023). |
+| `V003__stored_procs.sql` — 9 procedures (D-020) | **VERIFIED** | All 9 applied twice (re-runnable); `uses_ansi_nulls` and `uses_quoted_identifier` = 1 on all 9; gate 2 green with the full manifest (D-023). Contract 5 from §5 (D-025..D-028); Login (D-021); SearchMovies (IS-01 pattern); CreateShowtime (D-030); GetSalesReport (D-031). |
 | `V004__seed.sql` | NOT STARTED | |
 | `V005__security.sql` — `cineflow_app` | **VERIFIED** | Login + user present; 7 permission rows. Gate 4 green. |
 
@@ -48,15 +48,17 @@ Frozen means: propose changes, do not make them.
 
 **M2 evidence (2026-10-06, `sqlcmd -b -I`, observed by the human).** Gate 1 OK. Gate 2 OK: ownership, schema-dbo, trusted, contract, `[OK] signatures`, `[OK] defaults` (after D-029 fixed the optionality detector). Gate 3 FAIL 91010 (expected: no seed; moves to M3, D-020). Gate 4 OK (TC-SEC-01; last run at the CancelBooking apply).
 
+**M2 exit (2026-10-06, `sqlcmd -b -I`; `verify.bat` run by the human, gates 1 and 4 also by the agent).** All 9 procedures present. Gate 1 OK. Gate 2 OK with the full 9-procedure manifest: `[OK] signatures`, `[OK] defaults`, no SKIPPED or MISSING lines. Gate 4 OK (TC-SEC-01, at the final apply). Gate 3 FAIL 91010 (expected: no seed; M3). Validation calls: Login unknown user 50050; CreateShowtime unknown movie 50041, nothing written; SearchMovies and GetSalesReport return their headers with zero rows.
+
 ## 3. Verification harness — M1 gates green 2026-10-04 (gates 1, 2, 4)
 
 | Gate | File | Status |
 |---|---|---|
 | 1 | `Tests/01_static_sql_scan.sql` | **VERIFIED** — OK (exit 0) 2026-10-04: no dynamic SQL (heuristic) |
-| 2 | `Tests/02_ownership_and_constraints.sql` | **VERIFIED** — OK (exit 0) 2026-10-04: ownership OK, schema-dbo asserted (D-015) OK, trusted OK, contract OK, (d)/(e) SKIPPED printed (D-016), zero procs. 2026-10-06: (d) signatures and (e) defaults OK with 5 procs; (e) detector fixed by D-029 |
-| 3 | `Tests/03_smoke_as_app.sql` | Expected FAIL 91010 (exit 1): needs procs + seed (M2/M3). Not a defect. |
+| 2 | `Tests/02_ownership_and_constraints.sql` | **VERIFIED** — OK (exit 0) 2026-10-04: ownership OK, schema-dbo asserted (D-015) OK, trusted OK, contract OK, (d)/(e) SKIPPED printed (D-016), zero procs. 2026-10-06: (d) signatures and (e) defaults OK with 5 procs; (e) detector fixed by D-029. 2026-10-06: OK with all 9 procs (full manifest) |
+| 3 | `Tests/03_smoke_as_app.sql` | Expected FAIL 91010 (exit 1): needs seed (M3); all 9 procs exist since 2026-10-06. Not a defect. |
 | 4 | `Tests/04_security_denials.sql` | **VERIFIED** — OK (exit 0) 2026-10-04: all direct access denied |
-| 5 | `Tests/05_invariants.sql` | Expected FAIL 91010 (exit 1): needs procs + seed (M2/M3). Not a defect. |
+| 5 | `Tests/05_invariants.sql` | Expected FAIL 91010 (exit 1): needs seed (M3); all 9 procs exist since 2026-10-06. Not a defect. |
 | 6 | `Tests/Concurrency/BookingConcurrencyTests.cs` | WRITTEN, **never compiled** |
 | runner | `Deploy/verify.bat` | **VERIFIED** — gates 1, 2 pass, stops at gate 3 (exit 1) as designed; all `sqlcmd` lines carry `-I` (D-017) |
 
@@ -73,8 +75,8 @@ The original `Movie-Ticket-Booking-Management-System` repo is archived read-only
 | Item | Value |
 |---|---|
 | Repo root | `C:\Users\gelos\Downloads\Movie-Ticket-Booking-Management-System-main` (original project in `legacy\`, D-022) |
-| Agent | Hermes CLI, run natively in **Windows PowerShell** |
-| Agent editor | VS Code (Hermes integrates with VS Code, not Visual Studio) |
+| Agent | WorkBuddy AI IDE: commands via its Bash tool (Git Bash); its PowerShell tool returns no output |
+| Agent editor | WorkBuddy AI IDE (not Visual Studio) |
 | Designer / run / debug | Visual Studio (from M5 onward), operated by the human |
 | Shell | PowerShell — see the invocation note below |
 | Target | .NET Framework 4.7.2, WinForms |
@@ -109,8 +111,8 @@ Each phase ends at a gate. **Do not begin a phase until the previous gate is gre
 |---|---|---|---|---|
 | M0 | Specification frozen | — | Four artifacts written and reviewed | **DONE** |
 | M1 | Schema + security | M0 | `verify.bat` gates 1, 2, 4 pass | **DONE (2026-10-04)** |
-| M2 | Stored procedures | M1 (tables must exist) | gates 1, 2 (no SKIPPED lines) and 4 pass; gate 3 moves to M3 (D-020) | **CURRENT** |
-| M3 | Seed + invariants | M2 (procs write the data) | all 5 SQL gates pass | pending |
+| M2 | Stored procedures | M1 (tables must exist) | gates 1, 2 (no SKIPPED lines) and 4 pass; gate 3 moves to M3 (D-020) | **DONE (2026-10-06)** |
+| M3 | Seed + invariants | M2 (procs write the data) | all 5 SQL gates pass | **CURRENT** |
 | M4 | **Concurrency proof** | M3 (needs real rows) | TC-CONC-01/02, TC-CANCEL-01/02, TC-PURGE, TC-PAY all green | pending |
 | M5 | Data + business layers | M4 (contract proven before wrapping it) | unit tests pass; no SQL above the DAL | pending |
 | M6a | UI design tokens (D-014) | M5 | palette, type scale, spacing, library decision recorded | pending |
@@ -130,7 +132,7 @@ Each phase ends at a gate. **Do not begin a phase until the previous gate is gre
 
 | Risk | Mitigation | Status |
 |---|---|---|
-| Agent reaches for dynamic SQL in `usp_SearchMovies` (optional filters make it the natural approach) | Gate 1 + IS-01 example pattern | Watch at M2 |
+| Agent reaches for dynamic SQL in `usp_SearchMovies` (optional filters make it the natural approach) | Gate 1 + IS-01 example pattern | **Resolved 2026-10-06**: static IS-01 pattern; gate 1 OK |
 | Agent uses `WITH NOCHECK` when seed data violates a constraint | Gate 2 `is_not_trusted` check | Watch at M3 |
 | `TestFixture` / `ContractScenarios` unimplemented | Build at M3 | Open |
 | Agent edits `*.Designer.cs` | `AGENTS.md` §5 prohibition | Watch at M6b |
@@ -142,6 +144,9 @@ Each phase ends at a gate. **Do not begin a phase until the previous gate is gre
 | Tests that call Confirm/Cancel via `INSERT ... EXEC` and expect a THROW get 3915 from the procedure's ROLLBACK | Check when gate 5 first runs | Watch at M3 |
 | Line endings differ by file (V003, CURRENT_STATE: CRLF; DECISIONS, DATA-CONTRACT, Tests/02: LF); `core.autocrlf` warns on every diff | Add `.gitattributes` | Open |
 | M6a cites D-014, but `DECISIONS.md` has no D-014 | Record it or re-cite before M6a | Open |
+| `usp_Login`, `usp_SearchMovies`, `usp_CreateShowtime`, `usp_GetSalesReport` happy paths unproven (only error or empty paths observed) | Tests with seed data at M3 (D-020 carried forward) | Open until M3 |
+| No procedures add or edit movies, screens or users; the EXECUTE-only login cannot write them any other way | Decide before M5: admin procedures (each with a D-record) or seed-only reference data | Open |
+| `usp_SearchMovies` does not return `PosterPath` (IS-01 column list); M6 movie cards need it | Add with a D-record at M6 | Watch at M6 |
 
 ---
 
