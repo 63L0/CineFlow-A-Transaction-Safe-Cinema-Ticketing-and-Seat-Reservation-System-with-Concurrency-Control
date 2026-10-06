@@ -362,3 +362,32 @@ BEGIN
 END
 
 GO
+
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+GO
+
+CREATE OR ALTER PROCEDURE usp_Login
+    @Username NVARCHAR(50)
+AS
+BEGIN
+  SET NOCOUNT ON;
+
+  DECLARE @UserId INT, @FullName NVARCHAR(120), @RoleName NVARCHAR(30),
+          @PasswordHash NVARCHAR(255), @IsActive BIT;
+
+  SELECT @UserId = u.UserId, @FullName = u.FullName, @RoleName = r.RoleName,
+         @PasswordHash = u.PasswordHash, @IsActive = u.IsActive
+  FROM Users u
+  INNER JOIN Roles r ON r.RoleId = u.RoleId
+  WHERE u.Username = @Username;
+
+  -- PC-01: one row or an error, never empty. Same message as wrong password (D-021).
+  IF @UserId IS NULL
+    THROW 50050, 'Invalid username or password.', 1;
+
+  SELECT @UserId AS UserId, @FullName AS FullName, @RoleName AS RoleName,
+         @PasswordHash AS PasswordHash, @IsActive AS IsActive;
+END
+
+GO

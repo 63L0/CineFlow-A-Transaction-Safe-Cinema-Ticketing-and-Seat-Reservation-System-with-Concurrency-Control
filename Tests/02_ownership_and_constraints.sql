@@ -120,7 +120,7 @@ PRINT '  [OK] contract   all frozen constraints and indexes present';
 DECLARE @ContractProcs TABLE (ProcName SYSNAME);
 INSERT INTO @ContractProcs VALUES
     ('usp_CreateBooking'), ('usp_ConfirmPayment'), ('usp_CancelBooking'),
-    ('usp_GetSeatMap'),    ('usp_PurgeExpiredHolds');
+    ('usp_GetSeatMap'),    ('usp_PurgeExpiredHolds'), ('usp_Login');
 
 DECLARE @ProcsPresent INT = (
     SELECT COUNT(*) FROM sys.procedures p
@@ -168,7 +168,9 @@ INSERT INTO @Expected (ProcName, Ordinal, ParamName, Decl, IsOutput) VALUES
  ('usp_CancelBooking',     2, '@Reason',         'nvarchar(200)',  0),
  ('usp_CancelBooking',     3, '@CancelledBy',    'int',            0),
 -- usp_GetSeatMap
- ('usp_GetSeatMap',        1, '@ShowtimeId',     'int',            0);
+ ('usp_GetSeatMap',        1, '@ShowtimeId',     'int',            0),
+-- usp_Login
+ ('usp_Login',             1, '@Username',       'nvarchar(50)',   0);
 -- usp_PurgeExpiredHolds intentionally takes no parameters.
 
 DECLARE @Actual TABLE (
@@ -263,7 +265,8 @@ INSERT INTO @Optionality VALUES
     ('usp_CreateBooking',  '@CreatedBy',       0),
     ('usp_CancelBooking',  '@BookingId',       0),
     ('usp_CancelBooking',  '@Reason',          0),
-    ('usp_CancelBooking',  '@CancelledBy',     0);
+    ('usp_CancelBooking',  '@CancelledBy',     0),
+    ('usp_Login',          '@Username',        0);
 
 DECLARE @OptViolations TABLE (ProcName SYSNAME, ParamName SYSNAME, Problem NVARCHAR(60));
 
