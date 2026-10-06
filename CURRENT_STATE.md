@@ -1,6 +1,6 @@
 # CineFlow — Current State
 
-**Last updated:** 2026-10-04 · **Phase:** M1 DONE, M2 CURRENT · **Owner of this file:** human, with agent-proposed diffs
+**Last updated:** 2026-10-06 · **Phase:** M1 DONE, M2 CURRENT (5 of 9 procedures VERIFIED) · **Owner of this file:** human, with agent-proposed diffs
 
 **This project is sequenced by dependency, not by date.** There is no deadline pressure. A milestone is finished when its gate is green — never because time has passed. If a gate is red, the correct action is always to stop and fix it, never to move on and come back.
 
@@ -26,7 +26,7 @@ This file is the answer to "what already exists?" Read it before starting any ta
 |---|---|
 | `DATA-CONTRACT.md` | **FROZEN** — schema, constraints, indexes, procedure signatures, error registry, test specs |
 | `IMPLEMENTATION-STANDARDS.md` | **FROZEN** — IS-01…IS-05, LO-01 (+ Addendum A), PC-01, VG-01 |
-| `DECISIONS.md` | Live decision log, 21 entries (D-015 to D-022 added 2026-10-04) |
+| `DECISIONS.md` | Live decision log, 28 entries (D-023 to D-029 added 2026-10-06) |
 | `Docs/WEEK0-DEFENSE-PACK.md` | Scope, topology, demo runbook (its day numbers are superseded by §6) |
 | `AGENTS.md` | Agent entry point |
 
@@ -40,18 +40,20 @@ Frozen means: propose changes, do not make them.
 | `CineFlow` database | **VERIFIED** | Tables = 11. Rebuilt from clean 2026-10-04 (prior hand-repaired state dropped: database + `cineflow_app` login). |
 | `V001__schema.sql` — 11 tables, `dbo.IntList` | **VERIFIED** | Gate 2(c) green: every frozen constraint/index present. 16 CHECKs, all `is_disabled = 0`, `is_not_trusted = 0`. |
 | `V002__indexes.sql` | **VERIFIED** | 26 indexes on user tables (`sys.indexes` type > 0). |
-| `V003__stored_procs.sql` — 9 procedures (D-020) | NOT STARTED | Bodies exist in the contract as **WRITTEN** text only |
+| `V003__stored_procs.sql` — 9 procedures (D-020) | **PARTIAL: 5 of 9 VERIFIED** | Applied twice (re-runnable); gate 2 green incl. signatures + defaults. Contract 5: PurgeExpiredHolds, GetSeatMap, CreateBooking (reviewer body, D-025..D-027), CancelBooking, ConfirmPayment (D-028 fix). Remaining 4 (Login, SearchMovies, CreateShowtime, GetSalesReport): NOT STARTED; each one ships with its gate 2 manifest rows (D-023). |
 | `V004__seed.sql` | NOT STARTED | |
 | `V005__security.sql` — `cineflow_app` | **VERIFIED** | Login + user present; 7 permission rows. Gate 4 green. |
 
 **M1 evidence (2026-10-04, `sqlcmd -b -I`, exit codes as observed).** Gate 1 OK (0). Gate 2 OK (0): ownership OK, schema-dbo-owned asserted per D-015 OK, constraints trusted OK, contract OK, signatures/defaults `[--] SKIPPED` per D-016. Gate 4 OK (0). Gate 3 FAIL 91010 (exit 1, expected: no procs/seed). Gate 5 FAIL 91010 (exit 1, expected: no procs/seed). Catalog: 11 tables, 16 CHECKs trusted, 26 indexes, 7 permission rows.
+
+**M2 evidence (2026-10-06, `sqlcmd -b -I`, observed by the human).** Gate 1 OK. Gate 2 OK: ownership, schema-dbo, trusted, contract, `[OK] signatures`, `[OK] defaults` (after D-029 fixed the optionality detector). Gate 3 FAIL 91010 (expected: no seed; moves to M3, D-020). Gate 4 OK (TC-SEC-01; last run at the CancelBooking apply).
 
 ## 3. Verification harness — M1 gates green 2026-10-04 (gates 1, 2, 4)
 
 | Gate | File | Status |
 |---|---|---|
 | 1 | `Tests/01_static_sql_scan.sql` | **VERIFIED** — OK (exit 0) 2026-10-04: no dynamic SQL (heuristic) |
-| 2 | `Tests/02_ownership_and_constraints.sql` | **VERIFIED** — OK (exit 0) 2026-10-04: ownership OK, schema-dbo asserted (D-015) OK, trusted OK, contract OK, (d)/(e) SKIPPED printed (D-016), zero procs |
+| 2 | `Tests/02_ownership_and_constraints.sql` | **VERIFIED** — OK (exit 0) 2026-10-04: ownership OK, schema-dbo asserted (D-015) OK, trusted OK, contract OK, (d)/(e) SKIPPED printed (D-016), zero procs. 2026-10-06: (d) signatures and (e) defaults OK with 5 procs; (e) detector fixed by D-029 |
 | 3 | `Tests/03_smoke_as_app.sql` | Expected FAIL 91010 (exit 1): needs procs + seed (M2/M3). Not a defect. |
 | 4 | `Tests/04_security_denials.sql` | **VERIFIED** — OK (exit 0) 2026-10-04: all direct access denied |
 | 5 | `Tests/05_invariants.sql` | Expected FAIL 91010 (exit 1): needs procs + seed (M2/M3). Not a defect. |
@@ -135,6 +137,11 @@ Each phase ends at a gate. **Do not begin a phase until the previous gate is gre
 | Files created in VS Code missing from `.csproj` | Human includes in VS | Watch from M5 |
 | No deadline → scope creep, endless UI polish, reopening settled decisions | §6 rule: no work added to a green milestone; `DECISIONS.md` reopening criteria | Open |
 | Multi-seat lock ordering not guaranteed by `INSERT…SELECT…ORDER BY` | TC-CONC-02 asserts no error 1205 | Open until M4 |
+| `usp_GetSeatMap` returns an extra `PurgedCount` result set when its guard fires (D-024) | DAL reads it through one helper that skips to the seat rows; an M3 test covers both cases | Open until M5 |
+| Concurrent retries of one `RequestToken` in `usp_ConfirmPayment`: the loser gets 50016, not `WasDuplicate=1` | Check TC-PAY-05's expected outcome; if it requires `WasDuplicate=1`, re-check the token after the `Bookings` lock | Open until M4 |
+| Tests that call Confirm/Cancel via `INSERT ... EXEC` and expect a THROW get 3915 from the procedure's ROLLBACK | Check when gate 5 first runs | Watch at M3 |
+| Line endings differ by file (V003, CURRENT_STATE: CRLF; DECISIONS, DATA-CONTRACT, Tests/02: LF); `core.autocrlf` warns on every diff | Add `.gitattributes` | Open |
+| M6a cites D-014, but `DECISIONS.md` has no D-014 | Record it or re-cite before M6a | Open |
 
 ---
 
@@ -151,9 +158,9 @@ Agents **propose** a diff in the task report; the human applies it. Rules:
 
 a. V001/V002/V005 apply exit codes were not captured (state verified by gate 2, not by apply log). Covered by rebuild script at M7.
 
-b. Gate 2 path 91007 (partial procedure set): first exercised at M2.
+b. Gate 2 path 91007 (partial procedure set): first exercised at M2. Exercised at M2: fired correctly while 2-4 of the 5 contract procs existed.
 
-c. Gate 2 section (e) default/optional check: compiles, first runs at M2.
+c. Gate 2 section (e) default/optional check: compiles, first runs at M2. First ran at M2: false positives, fixed by D-029; now OK.
 
 d. `verify.bat` failure banner still says 'today's work': cosmetic.
 
