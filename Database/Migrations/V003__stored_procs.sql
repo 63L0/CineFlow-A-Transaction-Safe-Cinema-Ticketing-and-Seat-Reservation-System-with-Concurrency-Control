@@ -480,3 +480,37 @@ BEGIN
 END
 
 GO
+
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+GO
+
+CREATE OR ALTER PROCEDURE usp_GetSalesReport
+    @FromDate DATE,
+    @ToDate   DATE
+AS
+BEGIN
+  SET NOCOUNT ON;
+
+  -- D-031: inputs are Philippine local dates (UTC+8); Payments.PaidAt is UTC.
+  DECLARE @FromUtc DATETIME2 = DATEADD(HOUR, -8, CAST(@FromDate AS DATETIME2));
+  DECLARE @ToUtc   DATETIME2 = DATEADD(HOUR, -8, CAST(DATEADD(DAY, 1, @ToDate) AS DATETIME2));
+
+  -- Result set, may be empty (not PC-01). Seats counted per booking so amounts are not multiplied.
+  SELECT CAST(DATEADD(HOUR, 8, p.PaidAt) AS DATE) AS SalesDate,
+         m.MovieId, m.Title,
+         SUM(bs.SeatCount) AS TicketsSold,
+         SUM(p.Amount)     AS GrossRevenue
+  FROM Payments p
+  INNER JOIN Bookings  b  ON b.BookingId   = p.BookingId
+  INNER JOIN Showtimes st ON st.ShowtimeId = b.ShowtimeId
+  INNER JOIN Movies    m  ON m.MovieId     = st.MovieId
+  CROSS APPLY (SELECT COUNT(*) AS SeatCount FROM BookingSeats x
+               WHERE x.BookingId = b.BookingId) bs
+  WHERE p.Status = 'PAID'
+    AND p.PaidAt >= @FromUtc AND p.PaidAt < @ToUtc
+  GROUP BY CAST(DATEADD(HOUR, 8, p.PaidAt) AS DATE), m.MovieId, m.Title
+  ORDER BY SalesDate, m.Title;
+END
+
+GO

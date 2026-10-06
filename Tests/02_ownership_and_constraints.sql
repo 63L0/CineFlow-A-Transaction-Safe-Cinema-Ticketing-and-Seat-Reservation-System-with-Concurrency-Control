@@ -120,7 +120,7 @@ PRINT '  [OK] contract   all frozen constraints and indexes present';
 DECLARE @ContractProcs TABLE (ProcName SYSNAME);
 INSERT INTO @ContractProcs VALUES
     ('usp_CreateBooking'), ('usp_ConfirmPayment'), ('usp_CancelBooking'),
-    ('usp_GetSeatMap'),    ('usp_PurgeExpiredHolds'), ('usp_Login'), ('usp_SearchMovies'), ('usp_CreateShowtime');
+    ('usp_GetSeatMap'),    ('usp_PurgeExpiredHolds'), ('usp_Login'), ('usp_SearchMovies'), ('usp_CreateShowtime'), ('usp_GetSalesReport');
 
 DECLARE @ProcsPresent INT = (
     SELECT COUNT(*) FROM sys.procedures p
@@ -181,7 +181,10 @@ INSERT INTO @Expected (ProcName, Ordinal, ParamName, Decl, IsOutput) VALUES
  ('usp_CreateShowtime',    2, '@ScreenId',       'int',            0),
  ('usp_CreateShowtime',    3, '@StartsAt',       'datetime2(7)',   0),
  ('usp_CreateShowtime',    4, '@BasePrice',      'decimal(10,2)',  0),
- ('usp_CreateShowtime',    5, '@CreatedBy',      'int',            0);
+ ('usp_CreateShowtime',    5, '@CreatedBy',      'int',            0),
+-- usp_GetSalesReport
+ ('usp_GetSalesReport',    1, '@FromDate',       'date',           0),
+ ('usp_GetSalesReport',    2, '@ToDate',         'date',           0);
 -- usp_PurgeExpiredHolds intentionally takes no parameters.
 
 DECLARE @Actual TABLE (
@@ -286,7 +289,9 @@ INSERT INTO @Optionality VALUES
     ('usp_CreateShowtime', '@ScreenId',        0),
     ('usp_CreateShowtime', '@StartsAt',        0),
     ('usp_CreateShowtime', '@BasePrice',       0),
-    ('usp_CreateShowtime', '@CreatedBy',       0);
+    ('usp_CreateShowtime', '@CreatedBy',       0),
+    ('usp_GetSalesReport', '@FromDate',        0),
+    ('usp_GetSalesReport', '@ToDate',          0);
 
 DECLARE @OptViolations TABLE (ProcName SYSNAME, ParamName SYSNAME, Problem NVARCHAR(60));
 
